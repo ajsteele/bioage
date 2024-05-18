@@ -1,0 +1,17 @@
+.errorNaN {
+  color: red;
+  border: solid 1px red;
+}
+
+.bioageform .result {
+  font-size: 1.2em;
+  color: #0066cc;
+}
+
+.bioageform select:disabled {
+    appearance: none;
+    border: none;
+    display: inline;
+    background: none;
+    color: #000000;
+}

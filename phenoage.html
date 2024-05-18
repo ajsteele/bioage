@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>‘PhenoAge’ biological age calculator</title>
+  <link rel="stylesheet" href="bioage.css">
+  <script src="phenoage.js"></script>
+</head>
+<body>
+  <h1>‘PhenoAge’ biological age calculator</h1>
+
+  <p>If you have the results for the following blood tests, you can use them to calculate an estimate of your ‘biological age’. This webpage is currently in beta so if you spot any mistakes please <a href="https://andrewsteele.co.uk/contact/">contact Andrew Steele</a> or, even better, <a href="https://github.com/ajsteele/bioage/issues">raise an issue</a> or make a pull request at <a href="https://github.com/ajsteele/bioage">github.com/ajsteele/bioage</a>.</p>
+
+  <p>The concept of biological age is also in beta so don’t take these results too seriously—and while it’s fun to run this if you already have access to the blood results needed, I wouldn’t bother going out and getting these tests done just for this. I’ve got a YouTube video on the way explaining more about biological age, but I wanted to get the calculator out first so some people could test it to make sure I’ve not made any errors coding it up!</p>
+
+  <div id="phenoAgeForm" class="bioageform">
+    <code>This form requires JavaScript to run. Please open in a browser with it enabled. It doesn’t store your data or do anything intrusive so don’t worry if you disable JavaScript for privacy reasons. :)</code>
+  </div>
+  <div id="phenoAgeResult" class="bioageform"></div>
+
+  <h2>About</h2>
+
+  <p>This calculator allows you to work out your ‘phenotypic age’ (or PhenoAge for short) as described in <a href="https://www.aging-us.com/article/101414/text">Levine et al. 2018</a>.</p>
+
+  <p>This website never stores your data. You can only access previous results by bookmarking the URL provided, and the results are stored in the URL ‘anchor’ (the bit after the <code>#</code> symbol) which is never transmitted to the server—all the calculations are done locally in your web browser.</p>
+</body>
+</html>
