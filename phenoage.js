@@ -101,7 +101,7 @@ function calculateResult() {
     // If lymphocyte count rather than percentage, divide by the total white blood cell count
     } else if(tests[i].id == 'lymphocyte' && testUnitsId[i] != '%') {
       // i-1 because it's the value before: TODO replace with name-based addressing
-      testValues[i] = testValuesRaw[i]/(testUnits[i]*(testValuesRaw[i-1]*testUnits[i-1]))*100;
+      testValues[i] = testValuesRaw[i]/(testUnits[i]*(testValuesRaw[i-1]/testUnits[i-1]))*100;
       console.log(tests[i].id + ': ' + testValues[i] + '% x ' + testUnits[i] + ' / ' + tests[i].coeff + ' = ' + testValues[i] * tests[i].coeff);
     } else {
       testValues[i] = testValuesRaw[i] / testUnits[i];
