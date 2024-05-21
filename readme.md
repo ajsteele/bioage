@@ -22,3 +22,9 @@ For privacy reasons, these calculators will never store your data. You can only 
 - Add default values for people of a specific age, perhaps with a checkbox or other input so you can fill in if you’re missing a couple of tests. (Which I was when I did this!) Get these from the median values for each age of each test from the [NHANES data](https://wwwn.cdc.gov/nchs/nhanes/nhanes3/datafiles.aspx) this clock was trained on, make a CSV, allow the JavaScript to read that in.
 - Add more methods of converting stuff to biological age, like time standing on one leg etc.
 - It would be nice to include uncertainty ranges.
+
+### Biomarkers to add
+
+- Time spent standing on one leg
+- Heart rate variability ([Fitbit data](https://www.thelancet.com/journals/landig/article/PIIS2589-7500(20)30246-6/fulltext))
+- An amazing array of potential biomarkers are listed on the [Geriatric Examination Tool Kit](https://geriatrictoolkit.missouri.edu/).
