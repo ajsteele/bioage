@@ -158,6 +158,7 @@ function createFormElements() {
     var input = document.createElement('input');
     input.setAttribute('type', 'text');
     input.setAttribute('id', tests[i].id);
+    input.setAttribute('inputmode', 'numeric');
     input.setAttribute('placeholder', text_placeholder);
     input.setAttribute('oninput', 'calculateResult()');
     if(savedValues !== null) {
