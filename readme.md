@@ -28,3 +28,7 @@ For privacy reasons, these calculators will never store your data. You can only 
 - Time spent standing on one leg
 - Heart rate variability ([Fitbit data](https://www.thelancet.com/journals/landig/article/PIIS2589-7500(20)30246-6/fulltext))
 - An amazing array of potential biomarkers are listed on the [Geriatric Examination Tool Kit](https://geriatrictoolkit.missouri.edu/).
+
+# Other tools for biomarker calculation
+
+For more detailed analysis of biomarkers using Python, try [Biolearn](https://bio-learn.github.io/)!
