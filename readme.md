@@ -17,6 +17,8 @@ For privacy reasons, these calculators will never store your data. You can only 
 
 - There are a couple of `TODO`s in the JavaScript that would be nice to fix.
 - Improve code commenting
+- Convert the test unit conversions into a CSV for ease of adding new ones, and to allow a column containing the source to be included.
+   - In particular, check the conversion for CRP (see [this issue](https://github.com/ajsteele/bioage/issues/1)).
 - Add more units for the various tests.
 - I should have coded the tests, results, units, etc as objects rather than arrays, to make keeping track of what’s going on easier.
 - Add default values for people of a specific age, perhaps with a checkbox or other input so you can fill in if you’re missing a couple of tests. (Which I was when I did this!) Get these from the median values for each age of each test from the [NHANES data](https://wwwn.cdc.gov/nchs/nhanes/nhanes3/datafiles.aspx) this clock was trained on, make a CSV, allow the JavaScript to read that in.
