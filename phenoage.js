@@ -120,7 +120,7 @@ function calculateResult() {
   console.log(mortalityScore);
   // As a 'fun' aside, calculate the risk of death over the next 12 months...
   riskOfDeath = 1-Math.exp(-Math.exp(rollingTotal)*(Math.exp(gamma*12)-1)/gamma);
-  phenoAge = 141.50225+Math.log(-0.00553*Math.log(1-mortalityScore))/0.090165;
+  phenoAge = 141.50225+Math.log(-0.00553*Math.log(1-mortalityScore))/0.09165;
   console.log(phenoAge);
 
   // Display the result
