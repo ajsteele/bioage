@@ -20,11 +20,12 @@ async function init() {
   try {
     const response = await fetch('biomarkers.json');
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    biomarkers = await response.json();
+    const text = await response.text();
+    if (!text) throw new Error("biomarkers.json is empty");
+    biomarkers = JSON.parse(text);
     createFormElements();
   } catch (e) {
-    document.getElementById('phenoAgeForm').innerHTML = 
-      `<p style="error">Error loading configuration: ${e.message}.</p>`;
+    document.getElementById('phenoAgeForm').innerHTML = `<p class="error-text">Error: ${e.message}</p>`;
   }
 }
 
