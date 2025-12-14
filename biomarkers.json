@@ -1,0 +1,102 @@
+[
+  {
+    "id": "age",
+    "name": "Age",
+    "coeff": 0.0804,
+    "units": [
+      { "name": "years", "conversion": 1 }
+    ]
+  },
+  {
+    "id": "albumin",
+    "name": "Albumin",
+    "coeff": -0.0336,
+    "units": [
+      { "name": "g/L", "conversion": 1},
+      { "name": "g/dL", "conversion": 10},
+      { "name": "g%", "conversion": 10},
+      { "name": "µmol/L", "conversion": 0.06646}
+    ]
+  },
+  {
+    "id": "creatinine",
+    "name": "Creatinine",
+    "coeff": 0.0095,
+    "units": [
+      { "name": "µmol/L", "conversion": 1},
+      { "name": "mg/dL", "conversion": 88.4955}
+    ]
+  },
+  {
+    "id": "glucose",
+    "name": "Glucose",
+    "coeff": 0.1953,
+    "units": [
+      { "name": "mmol/L", "conversion": 1},
+      { "name": "mg/dL", "conversion": 0.05551}
+    ]
+  },
+  {
+    "id": "crp",
+    "name": "C-reactive protein",
+    "coeff": 0.0954,
+    "transform": "log",
+    "units": [
+      { "name": "mg/L", "conversion": 0.1},
+      { "name": "mg/dL", "conversion": 1},
+      { "name": "nmol/L", "conversion": 0.0105}
+    ]
+  },
+  {
+    "id": "wbc",
+    "name": "White blood cell count",
+    "coeff": 0.0554,
+    "units": [
+      { "name": "1000 cells/µL", "conversion": 1},
+      { "name": "10⁹ cells/L", "conversion": 1}
+    ]
+  },
+  {
+    "id": "lymphocyte",
+    "name": "Lymphocytes",
+    "coeff": -0.012,
+    "units": [
+      { "name": "%", "conversion": 1},
+      { 
+        "name": "1000 cells/µL",
+        "conversion": 1,
+        "dependency": { "type": "percent_of", "targetId": "wbc" } 
+      },
+      { 
+        "name": "10⁹ cells/L",
+        "conversion": 1,
+        "source": "unknown",
+        "dependency": { "type": "percent_of", "targetId": "wbc" } 
+      }
+    ]
+  },
+  {
+    "id": "mcv",
+    "name": "Mean cell volume",
+    "coeff": 0.0268,
+    "units": [
+      { "name": "fL", "conversion": 1}
+    ]
+  },
+  {
+    "id": "rcdw",
+    "name": "Red cell distribution width",
+    "coeff": 0.3306,
+    "units": [
+      { "name": "%", "conversion": 1}
+    ]
+  },
+  {
+    "id": "ap",
+    "name": "Alkaline phosphatase",
+    "coeff": 0.0019,
+    "units": [
+      { "name": "U/L", "conversion": 1}
+    ]
+  }
+]
