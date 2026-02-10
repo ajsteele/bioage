@@ -1,0 +1,10 @@
+test_id,name,canonical_unit
+albumin,Albumin,g/L
+creatinine,Creatinine,µmol/L
+glucose,Glucose,mmol/L
+crp,C-reactive protein,mg/L
+wbc,White blood cell count,10⁹ cells/L
+lymphocyte,Lymphocytes,%
+mcv,Mean cell volume,fL
+rcdw,Red cell distribution width,%
+ap,Alkaline phosphatase,U/L

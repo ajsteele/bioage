@@ -1,0 +1,20 @@
+test_id,unit,to_canonical_factor
+albumin,g/L,1
+albumin,g/dL,10
+albumin,g%,10
+albumin,µmol/L,0.0665
+creatinine,µmol/L,1
+creatinine,mg/dL,88.4
+glucose,mmol/L,1
+glucose,mg/dL,0.05551
+crp,mg/L,1
+crp,mg/dL,10
+crp,nmol/L,0.105
+wbc,10⁹ cells/L,1
+wbc,1000 cells/µL,1
+lymphocyte,%,1
+lymphocyte,1000 cells/µL,1
+lymphocyte,10⁹ cells/L,1
+mcv,fL,1
+rcdw,%,1
+ap,U/L,1
