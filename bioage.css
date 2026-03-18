@@ -3,6 +3,11 @@
   border: solid 1px red;
 }
 
+.error-message {
+  color: red;
+  font-size: 0.85em;
+}
+
 .bioageform .result {
   font-size: 1.2em;
   color: #0066cc;
@@ -14,4 +19,54 @@
     display: inline;
     background: none;
     color: #000000;
+}
+
+/* Date of birth and test date section */
+.date-section {
+  margin-bottom: 1em;
+}
+
+.date-row {
+  margin-bottom: 0.5em;
+}
+
+.date-row label {
+  display: inline-block;
+  width: 10em;
+  font-weight: bold;
+}
+
+.date-row input[type="date"] {
+  font-size: 1em;
+}
+
+/* Share card */
+#shareSection {
+  margin-top: 1.5em;
+}
+
+#shareCanvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.share-buttons {
+  margin-top: 0.5em;
+}
+
+.share-buttons button {
+  font-size: 1em;
+  padding: 0.4em 1.2em;
+  margin-right: 0.5em;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+}
+
+.share-buttons button:hover {
+  background: #e0e0e0;
 }

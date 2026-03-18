@@ -58,25 +58,17 @@ function loadConfig() {
 }
 
 // Build the tests array used by the form, derived from model + testDefs + conversions
+// Age is excluded — it's calculated from DOB + test date
 var formTests = [];
 
 function buildFormTests() {
   formTests = [];
   for (var i = 0; i < model.biomarkers.length; i++) {
     var bm = model.biomarkers[i];
+    if (bm.test_id === 'age') continue; // age is calculated, not entered
+
     var testDef = findTestDef(bm.test_id);
     var testConversions = conversions[bm.test_id];
-
-    if (bm.test_id === 'age') {
-      // Age is special: not in tests.csv, just a number in years
-      formTests.push({
-        id: 'age',
-        name: 'Age',
-        units: ['years'],
-        to_canonical_factors: [1]
-      });
-      continue;
-    }
 
     var units = [];
     var factors = [];
@@ -103,12 +95,25 @@ function findTestDef(test_id) {
   return null;
 }
 
+// --- Age calculation from DOB + test date ---
+
+function calculateAge(dob, testDate) {
+  var ms = testDate.getTime() - dob.getTime();
+  return ms / (365.25 * 24 * 60 * 60 * 1000);
+}
+
+function getTodayString() {
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
 // --- Unit conversion engine ---
 
-// Convert a value from a given unit to canonical (SI) for a test
 function toCanonical(value, unit, test_id) {
   var testConvs = conversions[test_id];
-  if (!testConvs) return value; // no conversions defined (e.g. age)
+  if (!testConvs) return value;
   for (var i = 0; i < testConvs.length; i++) {
     if (testConvs[i].unit === unit) {
       return value * testConvs[i].to_canonical_factor;
@@ -118,7 +123,6 @@ function toCanonical(value, unit, test_id) {
   return value;
 }
 
-// Convert a value from canonical to a specific target unit
 function fromCanonical(value, targetUnit, test_id) {
   var testConvs = conversions[test_id];
   if (!testConvs) return value;
@@ -133,8 +137,6 @@ function fromCanonical(value, targetUnit, test_id) {
 
 // --- Transforms ---
 
-// Apply a biomarker transform as specified in the model definition.
-// canonicalValues is a map of {test_id: canonical_value} for cross-references (e.g. percentage_of)
 function applyTransform(value, transform, canonicalValues) {
   if (!transform) return value;
 
@@ -142,16 +144,12 @@ function applyTransform(value, transform, canonicalValues) {
     return Math.log(value);
   }
 
-  // percentage_of:other_test_id — compute (value / other_value) * 100
   if (transform.indexOf('percentage_of:') === 0) {
     var refTestId = transform.split(':')[1];
     var refValue = canonicalValues[refTestId];
     if (refValue && refValue !== 0) {
-      // Both value and refValue should be in the same units at this point
-      // (both converted to model units by the caller)
       return (value / refValue) * 100;
     }
-    // If already in %, just return as-is
     return value;
   }
 
@@ -161,7 +159,6 @@ function applyTransform(value, transform, canonicalValues) {
 
 // --- Model calculation ---
 
-// Calculate biological age using a mortality model (PhenoAge formula)
 function calculateMortalityModel(rollingTotal, constants) {
   var tmonths = constants.tmonths;
   var gamma = constants.gamma;
@@ -176,7 +173,6 @@ function calculateMortalityModel(rollingTotal, constants) {
     Math.log(constants.phenoage_log_coeff * Math.log(1 - mortalityScore)) /
     constants.phenoage_divisor;
 
-  // 12-month mortality risk
   var riskOfDeath = 1 - Math.exp(
     -Math.exp(rollingTotal) * (Math.exp(gamma * 12) - 1) / gamma
   );
@@ -184,39 +180,49 @@ function calculateMortalityModel(rollingTotal, constants) {
   return { bioAge: bioAge, mortalityScore: mortalityScore, riskOfDeath: riskOfDeath };
 }
 
-// --- URL anchor persistence (unchanged logic, adapted for new data structures) ---
+// --- URL anchor persistence ---
+// Format: #dob=1990-01-15;testdate=2024-03-18;albumin=4.5,g/dL;creatinine=99,µmol/L;...
 
 function extractValuesFromAnchor(url) {
   var anchor = url.split('#')[1];
-  if (typeof anchor !== 'undefined') {
-    var testValUnitsURL = anchor.split(anchorKeysSeparator);
-    var testValUnits = [];
-    for (var i = 0; i < testValUnitsURL.length; i++) {
-      var parts = testValUnitsURL[i].split(/[=,]/);
-      var test = parts[0], value = parts[1], units = parts[2];
-      testValUnits.push({
-        id: decodeURIComponent(test),
-        value: decodeURIComponent(value),
-        units: decodeURIComponent(units)
+  if (typeof anchor === 'undefined') return null;
+
+  var parts = anchor.split(anchorKeysSeparator);
+  var result = { dob: null, testdate: null, tests: [] };
+
+  for (var i = 0; i < parts.length; i++) {
+    var keyVal = parts[i].split(/[=,]/);
+    var key = decodeURIComponent(keyVal[0]);
+
+    if (key === 'dob') {
+      result.dob = decodeURIComponent(keyVal[1]);
+    } else if (key === 'testdate') {
+      result.testdate = decodeURIComponent(keyVal[1]);
+    } else {
+      result.tests.push({
+        id: key,
+        value: decodeURIComponent(keyVal[1]),
+        units: decodeURIComponent(keyVal[2])
       });
     }
-    return testValUnits;
-  } else {
-    return null;
   }
+  return result;
 }
 
-function createAnchorFromValues(formTests, values, units) {
-  var url = '#';
+function createAnchorFromValues(dob, testdate, formTests, values, units) {
+  var url = '#dob=' + encodeURIComponent(dob) +
+    anchorKeysSeparator + 'testdate=' + encodeURIComponent(testdate);
+
   for (var i = 0; i < formTests.length; i++) {
-    url += encodeURIComponent(formTests[i].id) + '=' +
-           encodeURIComponent(values[i]) + anchorUnitsSeparator +
-           encodeURIComponent(units[i]) + anchorKeysSeparator;
+    url += anchorKeysSeparator +
+      encodeURIComponent(formTests[i].id) + '=' +
+      encodeURIComponent(values[i]) + anchorUnitsSeparator +
+      encodeURIComponent(units[i]);
   }
-  return url.slice(0, -1); // remove trailing separator
+  return url;
 }
 
-// --- Input parsing ---
+// --- Input parsing and validation ---
 
 function parseInput(value) {
   if (value === '') {
@@ -226,14 +232,71 @@ function parseInput(value) {
   }
 }
 
+function clearInputErrors() {
+  var errors = document.querySelectorAll('.errorNaN');
+  for (var i = 0; i < errors.length; i++) {
+    errors[i].classList.remove('errorNaN');
+  }
+  var msgs = document.querySelectorAll('.error-message');
+  for (var i = 0; i < msgs.length; i++) {
+    msgs[i].remove();
+  }
+}
+
+function markInputError(elementId, message) {
+  var el = document.getElementById(elementId);
+  if (el) el.classList.add('errorNaN');
+  if (message) {
+    var msg = document.createElement('span');
+    msg.className = 'error-message';
+    msg.textContent = ' ' + message;
+    if (el && el.parentNode) el.parentNode.appendChild(msg);
+  }
+}
+
 // --- Main calculation triggered by form input ---
 
 function calculateResult() {
   console.log('### Calculating! ###');
   var resultField = document.getElementById('phenoAgeResult');
-  var errorText = '';
+  var shareSection = document.getElementById('shareSection');
+  clearInputErrors();
+  var errors = [];
 
-  // Read raw values and selected units from the form
+  // Read DOB and test date
+  var dobInput = document.getElementById('dob');
+  var testdateInput = document.getElementById('testdate');
+  var dobVal = dobInput.value;
+  var testdateVal = testdateInput.value;
+
+  if (!dobVal || !testdateVal) {
+    resultField.innerHTML = '<p>Please enter your date of birth and test date above.</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+
+  if (isNaN(dob.getTime())) {
+    markInputError('dob', 'Invalid date');
+    errors.push('Invalid date of birth');
+  }
+  if (isNaN(testDate.getTime())) {
+    markInputError('testdate', 'Invalid date');
+    errors.push('Invalid test date');
+  }
+  if (testDate <= dob) {
+    markInputError('testdate', 'Must be after date of birth');
+    errors.push('Test date must be after date of birth');
+  }
+
+  var age = calculateAge(dob, testDate);
+  if (age < 0 || age > 150) {
+    errors.push('Calculated age (' + age.toFixed(1) + ') is out of range');
+  }
+
+  // Read biomarker values and selected units from the form
   var rawValues = [];
   var selectedUnits = [];
 
@@ -244,29 +307,45 @@ function calculateResult() {
     selectedUnits[i] = unitsElement.options[unitsElement.selectedIndex].text;
 
     if (isNaN(rawValues[i]) && valueElement.value !== '') {
-      valueElement.classList.add('errorNaN');
-      if (errorText === '') {
-        errorText += 'Invalid value for ' + formTests[i].name;
-      } else {
-        errorText += ', ' + formTests[i].name;
+      markInputError(formTests[i].id);
+      errors.push('Invalid value for ' + formTests[i].name);
+    } else if (isNaN(rawValues[i])) {
+      // Missing value — not an error per se, just incomplete
+    } else {
+      // Validate CRP > 0 (required for log transform)
+      if (formTests[i].id === 'crp' && rawValues[i] <= 0) {
+        markInputError('crp', 'Must be > 0');
+        errors.push('CRP must be greater than 0 (required for logarithmic calculation)');
       }
-    } else {
-      valueElement.classList.remove('errorNaN');
     }
   }
 
-  // Convert all values to canonical (SI) units first
+  if (errors.length > 0) {
+    resultField.innerHTML = '<p>Error: ' + errors.join('; ') + '</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
+  // Check all required inputs are filled
+  var allFilled = true;
+  for (var i = 0; i < rawValues.length; i++) {
+    if (isNaN(rawValues[i])) { allFilled = false; break; }
+  }
+  if (!allFilled) {
+    resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
+  // Convert all values to canonical (SI) units
   var canonicalValues = {};
+  canonicalValues['age'] = age;
   for (var i = 0; i < formTests.length; i++) {
-    var bm = model.biomarkers[i];
-    if (bm.test_id === 'age') {
-      canonicalValues['age'] = rawValues[i];
-    } else {
-      canonicalValues[bm.test_id] = toCanonical(rawValues[i], selectedUnits[i], bm.test_id);
-    }
+    var testId = formTests[i].id;
+    canonicalValues[testId] = toCanonical(rawValues[i], selectedUnits[i], testId);
   }
 
-  // Now compute the weighted sum using model coefficients
+  // Compute the weighted sum using model coefficients
   var rollingTotal = 0;
   for (var i = 0; i < model.biomarkers.length; i++) {
     var bm = model.biomarkers[i];
@@ -280,32 +359,31 @@ function calculateResult() {
       modelVal = fromCanonical(canonicalVal, bm.unit, bm.test_id);
     }
 
-    // For percentage_of transforms, we need the reference value in model units too
-    var modelCanonicalValues = {};
+    // Handle transforms
+    var modelRefValues = {};
     if (bm.transform && bm.transform.indexOf('percentage_of:') === 0) {
       var refId = bm.transform.split(':')[1];
-      // Find what unit the model expects for the reference biomarker
       var refBm = null;
       for (var j = 0; j < model.biomarkers.length; j++) {
-        if (model.biomarkers[j].test_id === refId) {
-          refBm = model.biomarkers[j];
-          break;
-        }
+        if (model.biomarkers[j].test_id === refId) { refBm = model.biomarkers[j]; break; }
       }
-      if (refBm && selectedUnits[i] !== '%') {
-        // Both lymphocyte and WBC need to be in comparable units
-        // Convert the reference (WBC) from canonical to model unit
+      // Find which form index corresponds to this biomarker
+      var formIdx = -1;
+      for (var j = 0; j < formTests.length; j++) {
+        if (formTests[j].id === bm.test_id) { formIdx = j; break; }
+      }
+      if (refBm && formIdx >= 0 && selectedUnits[formIdx] !== '%') {
         var refModelVal = fromCanonical(canonicalValues[refId], refBm.unit, refId);
-        modelCanonicalValues[refId] = refModelVal;
-        modelVal = applyTransform(modelVal, bm.transform, modelCanonicalValues);
+        modelRefValues[refId] = refModelVal;
+        modelVal = applyTransform(modelVal, bm.transform, modelRefValues);
       }
-      // If already in %, modelVal is already the percentage — no transform needed
     } else {
       modelVal = applyTransform(modelVal, bm.transform, {});
     }
 
-    console.log(bm.test_id + ': ' + rawValues[i] + ' ' + selectedUnits[i] +
-      ' → canonical ' + canonicalVal + ' → model (' + bm.unit + ') ' + modelVal +
+    console.log(bm.test_id + ': ' +
+      (bm.test_id === 'age' ? age.toFixed(2) + ' years' : rawValues[formTests.findIndex(function(t) { return t.id === bm.test_id; })] + ' ' + selectedUnits[formTests.findIndex(function(t) { return t.id === bm.test_id; })]) +
+      ' → model (' + bm.unit + ') ' + modelVal +
       ' × ' + bm.coefficient + ' = ' + (modelVal * bm.coefficient));
 
     rollingTotal += modelVal * bm.coefficient;
@@ -322,34 +400,180 @@ function calculateResult() {
 
   var phenoAge = result.bioAge;
   var riskOfDeath = result.riskOfDeath;
-  var chronologicalAge = rawValues[0]; // age is always first in the model
+  var acceleration = phenoAge - age;
 
   // Display the result
   if (isNaN(phenoAge)) {
-    if (errorText !== '') {
-      resultField.innerHTML = 'Error: ' + errorText;
-    } else {
-      resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
-    }
-  } else {
-    resultField.innerHTML = '<p class="result"><strong>Result:</strong> ' +
-      phenoAge.toFixed(2) + ' years (age acceleration ' +
-      (phenoAge - chronologicalAge).toFixed(2) + ' years)</p>';
-    resultField.innerHTML += '<p>This means your risk of death from age-related causes ' +
-      'in the coming year is approximately ' + (riskOfDeath * 100).toFixed(2) +
-      '%, or around 1 in ' + parseFloat((1 / riskOfDeath).toPrecision(2)) + '.</p>';
-    resultField.innerHTML += '<p>You can access this result again or share it using <a href="' +
-      createAnchorFromValues(formTests, rawValues, selectedUnits) +
-      '">this link</a>. Please think carefully before doing so as these test results are ' +
-      'private medical data, and with this many data points it is likely that your medical ' +
-      'record could be uniquely identified using these values.</p>';
+    resultField.innerHTML = '<p>Could not calculate result. Please check your inputs.</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
   }
+
+  resultField.innerHTML = '<p class="result"><strong>Result:</strong> ' +
+    phenoAge.toFixed(2) + ' years (age acceleration ' +
+    (acceleration >= 0 ? '+' : '') + acceleration.toFixed(2) + ' years)</p>';
+  resultField.innerHTML += '<p>Your chronological age at the test date: ' + age.toFixed(1) + ' years.</p>';
+  resultField.innerHTML += '<p>This means your risk of death from age-related causes ' +
+    'in the coming year is approximately ' + (riskOfDeath * 100).toFixed(2) +
+    '%, or around 1 in ' + parseFloat((1 / riskOfDeath).toPrecision(2)) + '.</p>';
+  resultField.innerHTML += '<p>You can access this result again or share it using <a href="' +
+    createAnchorFromValues(dobVal, testdateVal, formTests, rawValues, selectedUnits) +
+    '">this link</a>. Please think carefully before doing so as these test results are ' +
+    'private medical data, and with this many data points it is likely that your medical ' +
+    'record could be uniquely identified using these values.</p>';
+
+  // Generate and show the share card
+  generateShareCard(phenoAge, age, acceleration);
+}
+
+// --- Share card generation ---
+
+function generateShareCard(bioAge, chronAge, acceleration) {
+  var shareSection = document.getElementById('shareSection');
+  var canvas = document.getElementById('shareCanvas');
+  if (!canvas || !shareSection) return;
+
+  shareSection.style.display = 'block';
+
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width;
+  var h = canvas.height;
+
+  // Background gradient — green-ish for younger, amber for older
+  var grad = ctx.createLinearGradient(0, 0, w, h);
+  if (acceleration <= 0) {
+    grad.addColorStop(0, '#e8f5e9');
+    grad.addColorStop(1, '#c8e6c9');
+  } else {
+    grad.addColorStop(0, '#fff8e1');
+    grad.addColorStop(1, '#ffecb3');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle border
+  ctx.strokeStyle = acceleration <= 0 ? '#66bb6a' : '#ffb74d';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+
+  // Title
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('MY BIOLOGICAL AGE', w / 2, 50);
+
+  // Big biological age number
+  ctx.fillStyle = acceleration <= 0 ? '#2e7d32' : '#e65100';
+  ctx.font = 'bold 80px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(Math.round(bioAge), w / 2, 150);
+
+  // "X years younger/older" text
+  var deltaText;
+  var absDelta = Math.abs(acceleration).toFixed(1);
+  if (acceleration <= -0.5) {
+    deltaText = absDelta + ' years younger than my real age';
+  } else if (acceleration >= 0.5) {
+    deltaText = absDelta + ' years older than my real age';
+  } else {
+    deltaText = 'Right on track for my age';
+  }
+  ctx.fillStyle = '#555';
+  ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(deltaText, w / 2, 190);
+
+  // Chronological age
+  ctx.fillStyle = '#777';
+  ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Chronological age: ' + Math.round(chronAge), w / 2, 225);
+
+  // Divider line
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(100, 250);
+  ctx.lineTo(w - 100, 250);
+  ctx.stroke();
+
+  // Call to action
+  ctx.fillStyle = '#888';
+  ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Calculate yours at', w / 2, 278);
+  ctx.fillStyle = '#1565c0';
+  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('andrewsteele.co.uk/biological-age', w / 2, 300);
+}
+
+function downloadShareCard() {
+  var canvas = document.getElementById('shareCanvas');
+  if (!canvas) return;
+  var link = document.createElement('a');
+  link.download = 'my-biological-age.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function nativeShare() {
+  var canvas = document.getElementById('shareCanvas');
+  if (!canvas || !navigator.share) return;
+
+  canvas.toBlob(function(blob) {
+    var file = new File([blob], 'my-biological-age.png', { type: 'image/png' });
+    navigator.share({
+      title: 'My Biological Age',
+      text: 'Check out my biological age result!',
+      files: [file]
+    }).catch(function(err) {
+      console.log('Share cancelled or failed:', err);
+    });
+  }, 'image/png');
 }
 
 // --- Form generation ---
 
 function createFormElements() {
-  var savedValues = extractValuesFromAnchor(window.location.href);
+  var saved = extractValuesFromAnchor(window.location.href);
+  var formDiv = document.getElementById('phenoAgeForm');
+  formDiv.innerHTML = '';
+
+  // DOB + Test date section
+  var dateSection = document.createElement('div');
+  dateSection.className = 'date-section';
+
+  var dobRow = document.createElement('div');
+  dobRow.className = 'date-row';
+  var dobLabel = document.createElement('label');
+  dobLabel.setAttribute('for', 'dob');
+  dobLabel.textContent = 'Date of birth';
+  var dobInput = document.createElement('input');
+  dobInput.setAttribute('type', 'date');
+  dobInput.setAttribute('id', 'dob');
+  dobInput.setAttribute('oninput', 'calculateResult()');
+  if (saved && saved.dob) dobInput.value = saved.dob;
+  dobRow.appendChild(dobLabel);
+  dobRow.appendChild(dobInput);
+  dateSection.appendChild(dobRow);
+
+  var testdateRow = document.createElement('div');
+  testdateRow.className = 'date-row';
+  var testdateLabel = document.createElement('label');
+  testdateLabel.setAttribute('for', 'testdate');
+  testdateLabel.textContent = 'Test date';
+  var testdateInput = document.createElement('input');
+  testdateInput.setAttribute('type', 'date');
+  testdateInput.setAttribute('id', 'testdate');
+  testdateInput.setAttribute('oninput', 'calculateResult()');
+  if (saved && saved.testdate) {
+    testdateInput.value = saved.testdate;
+  } else {
+    testdateInput.value = getTodayString();
+  }
+  testdateRow.appendChild(testdateLabel);
+  testdateRow.appendChild(testdateInput);
+  dateSection.appendChild(testdateRow);
+
+  formDiv.appendChild(dateSection);
+
+  // Biomarker inputs table
   var formTable = document.createElement('table');
 
   for (var i = 0; i < formTests.length; i++) {
@@ -369,8 +593,9 @@ function createFormElements() {
     input.setAttribute('inputmode', 'numeric');
     input.setAttribute('placeholder', text_placeholder);
     input.setAttribute('oninput', 'calculateResult()');
-    if (savedValues !== null && savedValues[i]) {
-      input.setAttribute('value', savedValues[i].value);
+    // Restore from anchor
+    if (saved && saved.tests[i]) {
+      input.setAttribute('value', saved.tests[i].value);
     }
     inputCell.appendChild(input);
     formRow.appendChild(inputCell);
@@ -386,7 +611,7 @@ function createFormElements() {
       var option = document.createElement('option');
       option.textContent = formTests[i].units[j];
       select.appendChild(option);
-      if (savedValues !== null && savedValues[i] && formTests[i].units[j] === savedValues[i].units) {
+      if (saved && saved.tests[i] && formTests[i].units[j] === saved.tests[i].units) {
         select.selectedIndex = j;
       }
     }
@@ -399,11 +624,9 @@ function createFormElements() {
 
   var form = document.createElement('form');
   form.appendChild(formTable);
-  var formDiv = document.getElementById('phenoAgeForm');
-  formDiv.innerHTML = '';
   formDiv.appendChild(form);
 
-  if (savedValues !== null) {
+  if (saved && saved.dob && saved.tests.length > 0) {
     calculateResult();
   }
 }
