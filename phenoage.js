@@ -593,9 +593,15 @@ function createFormElements() {
     input.setAttribute('inputmode', 'numeric');
     input.setAttribute('placeholder', text_placeholder);
     input.setAttribute('oninput', 'calculateResult()');
-    // Restore from anchor
-    if (saved && saved.tests[i]) {
-      input.setAttribute('value', saved.tests[i].value);
+    // Restore from anchor — match by test id, not array index
+    var savedTest = null;
+    if (saved) {
+      for (var k = 0; k < saved.tests.length; k++) {
+        if (saved.tests[k].id === formTests[i].id) { savedTest = saved.tests[k]; break; }
+      }
+    }
+    if (savedTest) {
+      input.setAttribute('value', savedTest.value);
     }
     inputCell.appendChild(input);
     formRow.appendChild(inputCell);
@@ -611,7 +617,7 @@ function createFormElements() {
       var option = document.createElement('option');
       option.textContent = formTests[i].units[j];
       select.appendChild(option);
-      if (saved && saved.tests[i] && formTests[i].units[j] === saved.tests[i].units) {
+      if (savedTest && formTests[i].units[j] === savedTest.units) {
         select.selectedIndex = j;
       }
     }
