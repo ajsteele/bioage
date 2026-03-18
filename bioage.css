@@ -40,6 +40,17 @@
   font-size: 1em;
 }
 
+/* Informational alerts attached to form inputs */
+.input-alert {
+  margin: 0.3em 0 0.2em;
+  padding: 0.5em 0.7em;
+  font-size: 0.85em;
+  color: #664d03;
+  background: #fff3cd;
+  border: 1px solid #ffecb5;
+  border-radius: 4px;
+}
+
 /* Share card */
 #shareSection {
   margin-top: 1.5em;

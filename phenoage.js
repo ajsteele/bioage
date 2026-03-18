@@ -188,7 +188,7 @@ function extractValuesFromAnchor(url) {
   if (typeof anchor === 'undefined') return null;
 
   var parts = anchor.split(anchorKeysSeparator);
-  var result = { dob: null, testdate: null, tests: [] };
+  var result = { dob: null, testdate: null, tests: [], isLegacy: false };
 
   for (var i = 0; i < parts.length; i++) {
     var keyVal = parts[i].split(/[=,]/);
@@ -198,6 +198,9 @@ function extractValuesFromAnchor(url) {
       result.dob = decodeURIComponent(keyVal[1]);
     } else if (key === 'testdate') {
       result.testdate = decodeURIComponent(keyVal[1]);
+    } else if (key === 'age') {
+      // Old-format URL had age as a direct value; new format computes it from DOB + test date.
+      result.isLegacy = true;
     } else {
       result.tests.push({
         id: key,
@@ -403,7 +406,7 @@ function calculateResult() {
   var acceleration = phenoAge - age;
 
   // Display the result
-  if (isNaN(phenoAge)) {
+  if (isNaN(phenoAge) || !isFinite(phenoAge)) {
     resultField.innerHTML = '<p>Could not calculate result. Please check your inputs.</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
@@ -551,6 +554,14 @@ function createFormElements() {
   if (saved && saved.dob) dobInput.value = saved.dob;
   dobRow.appendChild(dobLabel);
   dobRow.appendChild(dobInput);
+  if (saved && saved.isLegacy) {
+    var legacyNote = document.createElement('p');
+    legacyNote.className = 'input-alert';
+    legacyNote.textContent = 'Your test results were loaded from an older version of ' +
+      'this calculator which stored your age directly. Please enter your date of birth ' +
+      'and the date of the test so we can calculate your age more accurately.';
+    dobRow.appendChild(legacyNote);
+  }
   dateSection.appendChild(dobRow);
 
   var testdateRow = document.createElement('div');
