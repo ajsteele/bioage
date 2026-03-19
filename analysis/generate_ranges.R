@@ -1,38 +1,51 @@
 #!/usr/bin/env Rscript
 #
-# generate_ranges.R
+# generate_ranges.R — PhenoAge Biomarker Range Analysis
 #
-# Compute normal and plausible ranges for PhenoAge biomarkers using the
-# NHANES III dataset from the BioAge R package. Outputs updated
-# config/tests.csv with range columns for the web calculator.
+# Dual-mode: works as both a headless script and a knitr::spin report.
 #
-# Usage:
-#   Rscript analysis/generate_ranges.R
+#   Headless:  Rscript analysis/generate_ranges.R
+#   Report:    knitr::spin("analysis/generate_ranges.R")  # -> HTML
 #
 # Prerequisites:
 #   install.packages("devtools")
 #   devtools::install_github("dayoonkwon/BioAge")
-#
-# Methodology
-# -----------
-# 1. NORMAL ranges (amber warning when value is outside):
-#    2.5th and 97.5th percentiles from the NHANES III cohort (adults 20-84,
-#    the same population used to train PhenoAge in Levine 2018).
-#
-# 2. PLAUSIBLE ranges (red error, blocks calculation):
-#    The wider of:
-#    (a) 0.1th and 99.9th percentiles from NHANES III (data-driven floor)
-#    (b) Clinical case-report extremes for severe pathology
-#    Then tightened where possible to catch unit-confusion errors.
-#
-# 3. UNIT-CONFUSION DETECTION:
-#    For biomarkers with multiple entry units, we check whether a normal
-#    value entered in the wrong unit would still fall within the plausible
-#    range. If so, we tighten the plausible range to exclude it.
-#
-# All ranges are in CANONICAL units as defined in config/tests.csv.
 
-# Install BioAge package if not already available
+#' ---
+#' title: "PhenoAge Biomarker Range Analysis"
+#' subtitle: "NHANES III data exploration and config generation"
+#' output:
+#'   html_document:
+#'     toc: true
+#'     toc_float: true
+#'     code_folding: hide
+#' ---
+
+#+ setup, include=FALSE
+is_spinning <- isTRUE(getOption("knitr.in.progress"))
+if (is_spinning) {
+  knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                        fig.width = 9, fig.height = 5)
+}
+
+#' # Overview
+#'
+#' This script computes normal ranges, plausible ranges, and age-stratified
+#' median defaults for the PhenoAge biological age calculator, using the
+#' NHANES III dataset from the BioAge R package. It writes:
+#'
+#' - `config/tests.csv` — updated with data-driven normal and plausible ranges
+#' - `config/defaults.csv` — LOESS-smoothed medians at each integer age (20-84)
+#'
+#' ## Methodology
+#'
+#' 1. **Normal ranges** (amber warning): 2.5th-97.5th percentiles from NHANES III
+#' 2. **Plausible ranges** (red error): wider of 0.1th-99.9th percentiles and
+#'    clinical case-report extremes, then tightened to catch unit-confusion errors
+#' 3. **Manual overrides** from `config/overrides.csv` applied last (always win)
+#' 4. **Age defaults**: raw medians at each integer age, LOESS-smoothed
+
+#+ install-bioage
 if (!requireNamespace("BioAge", quietly = TRUE)) {
   if (!requireNamespace("devtools", quietly = TRUE)) {
     install.packages("devtools")
@@ -41,26 +54,26 @@ if (!requireNamespace("BioAge", quietly = TRUE)) {
 }
 library(BioAge)
 
-# ── Locate repo paths ──
-script_dir <- dirname(sys.frame(1)$ofile)
-if (is.null(script_dir) || script_dir == "") {
-  # Fallback: assume working directory is the repo root
-  script_dir <- "analysis"
+#+ paths
+# Locate repo root: works both when sourced (Rscript) and when spun (knitr)
+if (is_spinning) {
+  repo_dir <- normalizePath(file.path(getwd(), ".."))
+} else {
+  script_dir <- dirname(sys.frame(1)$ofile)
+  if (is.null(script_dir) || script_dir == "") script_dir <- "analysis"
+  repo_dir <- normalizePath(file.path(script_dir, ".."))
 }
-repo_dir <- normalizePath(file.path(script_dir, ".."))
 config_dir <- file.path(repo_dir, "config")
+cat("Repository root:", repo_dir, "\nConfig directory:", config_dir, "\n")
 
-cat("Repository root:", repo_dir, "\n")
-cat("Config directory:", config_dir, "\n\n")
+#' # Load NHANES III
 
-# ── Load NHANES III data ──
+#+ load-data
 data(NHANES3)
 cat("NHANES III dataset:", nrow(NHANES3), "observations\n")
-cat("Age range:", range(NHANES3$age, na.rm = TRUE), "\n\n")
+cat("Age range:", range(NHANES3$age, na.rm = TRUE), "\n")
 
-# ── Mapping: our test_id -> BioAge column name -> canonical unit ──
-# The BioAge package conveniently provides columns in multiple units.
-# We use the columns that match our canonical units directly.
+#+ biomarker-map
 biomarker_map <- data.frame(
   test_id = c("albumin", "creatinine", "glucose", "crp",
               "wbc", "lymphocyte", "mcv", "rcdw", "ap"),
@@ -68,26 +81,25 @@ biomarker_map <- data.frame(
              "wbc", "lymph", "mcv", "rdw", "alp"),
   canonical_unit = c("g/L", "umol/L", "mmol/L", "mg/L",
                      "10^9 cells/L", "%", "fL", "%", "U/L"),
-  # For columns only available in non-canonical units, provide conversion
-  # (all these are 1 because we're using the pre-converted columns)
   to_canonical = c(1, 1, 1, 1, 1, 1, 1, 1, 1),
   stringsAsFactors = FALSE
 )
 
-# ── Compute percentiles from NHANES III ──
-cat(strrep("=", 72), "\n")
-cat("PhenoAge Biomarker Ranges from NHANES III\n")
-cat(strrep("=", 72), "\n")
+#' # Distribution of each biomarker {.tabset}
+#'
+#' Histograms of each biomarker across the full NHANES III cohort, with the
+#' 2.5th/97.5th (normal) and 0.1th/99.9th (plausible) percentile boundaries.
 
+#+ compute-ranges
 results <- data.frame(
   test_id = character(),
-  normal_low = numeric(),
-  normal_high = numeric(),
-  plausible_low = numeric(),
-  plausible_high = numeric(),
+  normal_low = numeric(), normal_high = numeric(),
+  plausible_low = numeric(), plausible_high = numeric(),
   n = integer(),
   stringsAsFactors = FALSE
 )
+
+biomarker_vals <- list()
 
 for (i in seq_len(nrow(biomarker_map))) {
   tid <- biomarker_map$test_id[i]
@@ -97,35 +109,23 @@ for (i in seq_len(nrow(biomarker_map))) {
 
   vals <- NHANES3[[col]]
   if (is.null(vals)) {
-    cat("\n  WARNING: Column '", col, "' not found in NHANES3 dataset.\n")
-    cat("  Available columns: ", paste(head(names(NHANES3), 20), collapse = ", "), "...\n")
+    warning(paste("Column", col, "not found in NHANES3"))
     next
   }
 
   vals <- vals[!is.na(vals)] * conv
+  biomarker_vals[[tid]] <- vals
   n <- length(vals)
 
-  # Normal range: 2.5th–97.5th percentile
   normal <- quantile(vals, probs = c(0.025, 0.975))
-
-  # Data-driven plausible floor: 0.1th–99.9th percentile
   extreme <- quantile(vals, probs = c(0.001, 0.999))
 
-  cat("\n", strrep("-", 72), "\n")
-  cat(sprintf("%-25s (%s) — canonical unit: %s\n", tid, col, unit))
-  cat(sprintf("  N = %d non-missing values\n", n))
-  cat(sprintf("  Min: %.4f  Max: %.4f\n", min(vals), max(vals)))
-  cat(sprintf("  2.5th pctile: %.4f  97.5th pctile: %.4f\n", normal[1], normal[2]))
-  cat(sprintf("  0.1th pctile: %.4f  99.9th pctile: %.4f\n", extreme[1], extreme[2]))
-  cat(sprintf("  Mean: %.4f  SD: %.4f  Median: %.4f\n", mean(vals), sd(vals), median(vals)))
+  cat(sprintf("\n%s (%s) — %s: N=%d, normal=[%.3f, %.3f], extreme=[%.3f, %.3f]\n",
+              tid, col, unit, n, normal[1], normal[2], extreme[1], extreme[2]))
 
-  # Additional percentiles for reference
   pctiles <- quantile(vals, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99))
-  cat("  Percentiles:\n")
-  cat(sprintf("    1st: %.3f  5th: %.3f  10th: %.3f  25th: %.3f  50th: %.3f\n",
-              pctiles[1], pctiles[2], pctiles[3], pctiles[4], pctiles[5]))
-  cat(sprintf("    75th: %.3f  90th: %.3f  95th: %.3f  99th: %.3f\n",
-              pctiles[6], pctiles[7], pctiles[8], pctiles[9]))
+  cat(sprintf("  1st: %.3f  5th: %.3f  25th: %.3f  50th: %.3f  75th: %.3f  95th: %.3f  99th: %.3f\n",
+              pctiles[1], pctiles[2], pctiles[4], pctiles[5], pctiles[6], pctiles[8], pctiles[9]))
 
   results <- rbind(results, data.frame(
     test_id = tid,
@@ -138,16 +138,49 @@ for (i in seq_len(nrow(biomarker_map))) {
   ))
 }
 
-cat("\n\n", strrep("=", 72), "\n")
-cat("Summary of NHANES III-derived ranges (canonical units)\n")
-cat(strrep("=", 72), "\n\n")
+#+ histograms, results='asis', fig.height=4, eval=is_spinning
+for (i in seq_len(nrow(results))) {
+  tid <- results$test_id[i]
+  unit <- biomarker_map$canonical_unit[biomarker_map$test_id == tid]
+  vals <- biomarker_vals[[tid]]
+
+  cat(sprintf("\n## %s\n\n", tid))
+
+  qlim <- quantile(vals, probs = c(0.001, 0.999))
+  trimmed <- vals[vals >= qlim[1] & vals <= qlim[2]]
+
+  hist(trimmed, breaks = 80, col = "steelblue", border = "white",
+       main = paste0(tid, " (", unit, ") — N = ", format(length(vals), big.mark = ",")),
+       xlab = unit, ylab = "Frequency")
+  abline(v = results$normal_low[i], col = "orange", lwd = 2, lty = 2)
+  abline(v = results$normal_high[i], col = "orange", lwd = 2, lty = 2)
+  abline(v = results$plausible_low[i], col = "red", lwd = 2, lty = 3)
+  abline(v = results$plausible_high[i], col = "red", lwd = 2, lty = 3)
+  legend("topright", legend = c("Normal (2.5-97.5%)", "Plausible (0.1-99.9%)"),
+         col = c("orange", "red"), lty = c(2, 3), lwd = 2, cex = 0.8)
+
+  cat(sprintf("\n- **Normal range**: %.3f - %.3f %s\n", results$normal_low[i], results$normal_high[i], unit))
+  cat(sprintf("- **Plausible range**: %.3f - %.3f %s\n\n", results$plausible_low[i], results$plausible_high[i], unit))
+}
+
+#' # Percentile summary
+
+#+ percentile-table, eval=is_spinning
+knitr::kable(results[, c("test_id", "normal_low", "normal_high",
+                          "plausible_low", "plausible_high", "n")],
+             caption = "NHANES III-derived ranges (canonical units)")
+
+#+ percentile-print, eval=!is_spinning
 print(results, row.names = FALSE)
 
-# ── Clinical plausible overrides ──
-# The 0.1th/99.9th percentiles from NHANES III represent healthy-ish adults
-# aged 20-84. For plausible ranges, we want to accommodate severe pathology
-# that wouldn't appear in a population survey but could occur in a user.
-# We take the WIDER of the NHANES extreme and the clinical case-report value.
+#' # Clinical plausible overrides
+#'
+#' The 0.1th/99.9th percentiles from NHANES III represent healthy-ish adults
+#' aged 20-84. For plausible ranges, we accommodate severe pathology that
+#' wouldn't appear in a population survey. We take the WIDER of the NHANES
+#' extreme and the clinical case-report value.
+
+#+ clinical-overrides
 clinical_plausible <- list(
   albumin     = c(low = 10,    high = 65),    # nephrotic syndrome / dehydration
   creatinine  = c(low = 15,    high = 1800),   # muscle wasting / severe AKI (~20 mg/dL)
@@ -169,22 +202,17 @@ for (i in seq_len(nrow(results))) {
     results$plausible_low[i] <- min(results$plausible_low[i], clin["low"])
     results$plausible_high[i] <- max(results$plausible_high[i], clin["high"])
     if (results$plausible_low[i] != old_low || results$plausible_high[i] != old_high) {
-      cat(sprintf("  %s: plausible widened from [%.4f, %.4f] to [%.4f, %.4f] (clinical override)\n",
+      cat(sprintf("  %s: widened [%.4f, %.4f] -> [%.4f, %.4f]\n",
                   tid, old_low, old_high, results$plausible_low[i], results$plausible_high[i]))
     }
   }
 }
 
-# ── Unit-confusion tightening ──
-# Load conversions.csv to check for unit-confusion risks
-cat("\n", strrep("=", 72), "\n")
-cat("Unit-confusion analysis\n")
-cat(strrep("=", 72), "\n\n")
+#' # Unit-confusion tightening
 
+#+ unit-confusion
 convs_csv <- read.csv(file.path(config_dir, "conversions.csv"),
                       stringsAsFactors = FALSE)
-
-# Group conversions by test_id
 conv_list <- split(convs_csv, convs_csv$test_id)
 
 for (i in seq_len(nrow(results))) {
@@ -199,7 +227,6 @@ for (i in seq_len(nrow(results))) {
 
   cat(sprintf("\n%s:\n", tid))
 
-  # Show ranges in all units
   for (ci in seq_len(nrow(convs))) {
     u <- convs$unit[ci]
     f <- convs$to_canonical_factor[ci]
@@ -207,25 +234,19 @@ for (i in seq_len(nrow(results))) {
                 u, normal_lo / f, normal_hi / f, plaus_lo / f, plaus_hi / f))
   }
 
-  # Check each pair for confusion risk
   for (a in seq_len(nrow(convs))) {
     for (b in seq_len(nrow(convs))) {
       if (a == b) next
-
       fa <- convs$to_canonical_factor[a]
       fb <- convs$to_canonical_factor[b]
       ua <- convs$unit[a]
       ub <- convs$unit[b]
 
-      # Normal range in unit B as raw numbers
       b_normal_lo_raw <- normal_lo / fb
       b_normal_hi_raw <- normal_hi / fb
-
-      # If entered as unit A, these raw numbers become canonical values:
       confused_lo <- min(b_normal_lo_raw * fa, b_normal_hi_raw * fa)
       confused_hi <- max(b_normal_lo_raw * fa, b_normal_hi_raw * fa)
 
-      # Check overlap with plausible range
       overlap_lo <- max(confused_lo, plaus_lo)
       overlap_hi <- min(confused_hi, plaus_hi)
 
@@ -233,7 +254,6 @@ for (i in seq_len(nrow(results))) {
         cat(sprintf("  OVERLAP: normal %s value (%.2f-%.2f) entered as %s falls in plausible range\n",
                     ub, b_normal_lo_raw, b_normal_hi_raw, ua))
 
-        # Tighten: if confused range is above normal, lower plausible_high
         if (confused_lo > normal_hi) {
           new_hi <- confused_lo * 0.9
           if (new_hi > normal_hi && new_hi < plaus_hi) {
@@ -241,7 +261,6 @@ for (i in seq_len(nrow(results))) {
             plaus_hi <- new_hi
           }
         }
-        # If confused range is below normal, raise plausible_low
         if (confused_hi < normal_lo) {
           new_lo <- confused_hi * 1.1
           if (new_lo < normal_lo && new_lo > plaus_lo) {
@@ -252,30 +271,71 @@ for (i in seq_len(nrow(results))) {
       }
     }
   }
-
   results$plausible_low[i] <- round(plaus_lo, 4)
   results$plausible_high[i] <- round(plaus_hi, 4)
 }
 
-# ── Final summary ──
-cat("\n\n", strrep("=", 72), "\n")
-cat("Final ranges (canonical units)\n")
-cat(strrep("=", 72), "\n\n")
+#' # Manual overrides
+#'
+#' Values from `config/overrides.csv` are applied last and always win over
+#' computed ranges. This is for cases where algorithmic derivation can't
+#' capture domain knowledge (e.g. hsCRP plausible floor).
+
+#+ manual-overrides
+overrides_path <- file.path(config_dir, "overrides.csv")
+if (file.exists(overrides_path)) {
+  overrides <- read.csv(overrides_path, stringsAsFactors = FALSE)
+  cat(sprintf("Loaded %d manual override(s) from overrides.csv\n", nrow(overrides)))
+
+  for (j in seq_len(nrow(overrides))) {
+    tid <- overrides$test_id[j]
+    field <- overrides$field[j]
+    value <- overrides$value[j]
+    reason <- overrides$reason[j]
+
+    idx <- which(results$test_id == tid)
+    if (length(idx) == 0) {
+      cat(sprintf("  WARNING: override for unknown test_id '%s', skipping\n", tid))
+      next
+    }
+    if (!(field %in% c("normal_low", "normal_high", "plausible_low", "plausible_high"))) {
+      cat(sprintf("  WARNING: override for unknown field '%s', skipping\n", field))
+      next
+    }
+
+    old_val <- results[[field]][idx]
+    results[[field]][idx] <- value
+    cat(sprintf("  %s.%s: %.4f -> %.4f (%s)\n", tid, field, old_val, value, reason))
+  }
+} else {
+  cat("No overrides.csv found, skipping manual overrides.\n")
+}
+
+#' # Final ranges
+
+#+ final-ranges-table, eval=is_spinning
+knitr::kable(results[, c("test_id", "normal_low", "normal_high",
+                          "plausible_low", "plausible_high")],
+             caption = "Final ranges after clinical overrides, unit-confusion tightening, and manual overrides")
+
+#+ final-ranges-print, eval=!is_spinning
+cat("\nFinal ranges (canonical units):\n")
 print(results[, c("test_id", "normal_low", "normal_high", "plausible_low", "plausible_high")],
       row.names = FALSE)
 
-# ── Age-stratified median defaults ──
-# Compute smoothed median values for each biomarker at each integer age.
-# Used by the web calculator to fill in missing values with population defaults.
-# Strategy: compute raw medians at each integer age, then LOESS-smooth them
-# to handle noisy estimates at sparse ages.
+#' # Age-stratified defaults {.tabset}
+#'
+#' For each biomarker, we compute the raw median at each integer age,
+#' then fit a LOESS smooth. In the report, plots show:
+#'
+#' - **Grey dots**: raw medians at each integer age
+#' - **Blue line**: LOESS-smoothed median
+#' - **Orange band**: 2.5th-97.5th percentile at each age (raw)
+#' - **Red dots**: 97.5th percentile at each age
 
-cat("\n\n", strrep("=", 72), "\n")
-cat("Age-stratified median defaults (LOESS-smoothed)\n")
-cat(strrep("=", 72), "\n\n")
-
-# Integer ages present in the data
-age_range <- 20:84  # PhenoAge training range
+#+ age-defaults
+age_range <- 20:84
+ages_all <- floor(NHANES3$age)
 
 medians_df <- data.frame(age = age_range)
 
@@ -283,22 +343,19 @@ for (i in seq_len(nrow(biomarker_map))) {
   tid <- biomarker_map$test_id[i]
   col <- biomarker_map$column[i]
   conv <- biomarker_map$to_canonical[i]
+  unit <- biomarker_map$canonical_unit[i]
 
   vals <- NHANES3[[col]] * conv
-  ages <- floor(NHANES3$age)
 
-  # Compute raw median at each integer age
   raw_medians <- sapply(age_range, function(a) {
-    v <- vals[ages == a & !is.na(vals)]
+    v <- vals[ages_all == a & !is.na(vals)]
     if (length(v) >= 5) median(v) else NA
   })
 
-  # LOESS smooth (span chosen to be fairly smooth but follow real trends)
   valid <- !is.na(raw_medians)
   if (sum(valid) >= 10) {
     fit <- loess(raw_medians[valid] ~ age_range[valid], span = 0.4)
     smoothed <- predict(fit, newdata = data.frame(x = age_range))
-    # Use smoothed where available, raw where not
     smoothed[!valid & is.na(smoothed)] <- NA
   } else {
     smoothed <- raw_medians
@@ -306,21 +363,83 @@ for (i in seq_len(nrow(biomarker_map))) {
 
   medians_df[[tid]] <- round(smoothed, 4)
 
-  cat(sprintf("  %s: smoothed %d ages (%.1f–%.1f range)\n",
+  cat(sprintf("  %s: smoothed %d ages (%.1f-%.1f range)\n",
               tid, sum(!is.na(smoothed)),
               min(smoothed, na.rm = TRUE), max(smoothed, na.rm = TRUE)))
 }
 
-# Write age-stratified medians
+#+ age-plots, results='asis', fig.height=5, eval=is_spinning
+for (i in seq_len(nrow(biomarker_map))) {
+  tid <- biomarker_map$test_id[i]
+  col <- biomarker_map$column[i]
+  conv <- biomarker_map$to_canonical[i]
+  unit <- biomarker_map$canonical_unit[i]
+
+  vals <- NHANES3[[col]] * conv
+
+  cat(sprintf("\n## %s\n\n", tid))
+
+  raw_medians <- sapply(age_range, function(a) {
+    v <- vals[ages_all == a & !is.na(vals)]
+    if (length(v) >= 5) median(v) else NA
+  })
+  raw_p025 <- sapply(age_range, function(a) {
+    v <- vals[ages_all == a & !is.na(vals)]
+    if (length(v) >= 5) quantile(v, 0.025) else NA
+  })
+  raw_p975 <- sapply(age_range, function(a) {
+    v <- vals[ages_all == a & !is.na(vals)]
+    if (length(v) >= 5) quantile(v, 0.975) else NA
+  })
+  raw_n <- sapply(age_range, function(a) sum(ages_all == a & !is.na(vals)))
+
+  ylim <- range(c(raw_p025, raw_p975), na.rm = TRUE)
+  plot(age_range, raw_medians, pch = 16, col = "grey50", cex = 0.8,
+       xlab = "Age (years)", ylab = paste0(tid, " (", unit, ")"),
+       main = paste0(tid, " — median and 95% range by age"), ylim = ylim)
+
+  valid_band <- !is.na(raw_p025) & !is.na(raw_p975)
+  polygon(c(age_range[valid_band], rev(age_range[valid_band])),
+          c(raw_p025[valid_band], rev(raw_p975[valid_band])),
+          col = rgb(1, 0.65, 0, 0.15), border = NA)
+  points(age_range, raw_p975, pch = 4, col = "red", cex = 0.6)
+  points(age_range, raw_p025, pch = 4, col = "red", cex = 0.6)
+  lines(age_range, medians_df[[tid]], col = "steelblue", lwd = 2.5)
+  legend("topright",
+         legend = c("Raw median", "LOESS smooth", "2.5th/97.5th pctile"),
+         col = c("grey50", "steelblue", "red"),
+         pch = c(16, NA, 4), lty = c(NA, 1, NA), lwd = c(NA, 2.5, NA),
+         cex = 0.8, bg = "white")
+
+  cat(sprintf("\n- **Age coverage**: %d of %d integer ages have N >= 5\n",
+              sum(raw_n >= 5), length(age_range)))
+  cat(sprintf("- **N per age**: min %d, median %d, max %d\n",
+              min(raw_n), median(raw_n), max(raw_n)))
+  cat(sprintf("- **LOESS range**: %.3f - %.3f %s\n\n",
+              min(medians_df[[tid]], na.rm = TRUE), max(medians_df[[tid]], na.rm = TRUE), unit))
+}
+
+#' # Sample size by age
+
+#+ sample-size, fig.height=4, eval=is_spinning
+n_per_age <- sapply(age_range, function(a) sum(ages_all == a, na.rm = TRUE))
+barplot(n_per_age, names.arg = age_range, col = "steelblue", border = "white",
+        xlab = "Age (years)", ylab = "N observations",
+        main = "NHANES III sample size by integer age")
+
+#' # Write output files
+
+#+ write-outputs
 medians_path <- file.path(config_dir, "defaults.csv")
 write.csv(medians_df, medians_path, row.names = FALSE)
-cat("\nWritten:", medians_path, "\n")
+cat("Written:", medians_path, "\n")
 
-# ── Write to config/tests.csv ──
-tests_csv <- read.csv(file.path(config_dir, "tests.csv"),
-                      stringsAsFactors = FALSE)
+#+ defaults-preview, eval=is_spinning
+knitr::kable(head(medians_df, 10), caption = "First 10 rows of defaults.csv")
 
-# Merge range columns
+#+ write-tests
+tests_csv <- read.csv(file.path(config_dir, "tests.csv"), stringsAsFactors = FALSE)
+
 tests_csv$normal_low <- NULL
 tests_csv$normal_high <- NULL
 tests_csv$plausible_low <- NULL
@@ -330,15 +449,17 @@ tests_out <- merge(tests_csv, results[, c("test_id", "normal_low", "normal_high"
                                            "plausible_low", "plausible_high")],
                    by = "test_id", all.x = TRUE)
 
-# Preserve original column order
 tests_out <- tests_out[, c("test_id", "name", "canonical_unit",
                             "normal_low", "normal_high",
                             "plausible_low", "plausible_high")]
-
-# Preserve original row order
 tests_out <- tests_out[match(tests_csv$test_id, tests_out$test_id), ]
 
 output_path <- file.path(config_dir, "tests.csv")
 write.csv(tests_out, output_path, row.names = FALSE)
-cat("\nWritten:", output_path, "\n")
+cat("Written:", output_path, "\n")
+
+#+ tests-preview, eval=is_spinning
+knitr::kable(tests_out, caption = "Final tests.csv", row.names = FALSE)
+
+#+ done, eval=!is_spinning
 cat("Done.\n")
