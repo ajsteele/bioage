@@ -177,41 +177,6 @@ knitr::kable(results[, c("test_id", "normal_low", "normal_high",
 #+ percentile-print, eval=!is_spinning
 print(results, row.names = FALSE)
 
-#' # Clinical plausible overrides
-#'
-#' The 0.1th/99.9th percentiles from NHANES III represent healthy-ish adults
-#' aged 20-84. For plausible ranges, we accommodate severe pathology that
-#' wouldn't appear in a population survey. We take the WIDER of the NHANES
-#' extreme and the clinical case-report value.
-
-#+ clinical-overrides
-clinical_plausible <- list(
-  albumin     = c(low = 10,    high = 65),    # nephrotic syndrome / dehydration
-  creatinine  = c(low = 15,    high = 1800),   # muscle wasting / severe AKI (~20 mg/dL)
-  glucose     = c(low = 1.0,   high = 50),     # hypoglycemic coma / DKA-HHS
-  crp         = c(low = 0.01,  high = 500),    # near-zero / severe sepsis
-  wbc         = c(low = 0.5,   high = 300),    # severe neutropenia / leukaemia
-  lymphocyte  = c(low = 1,     high = 99),     # severe lymphopenia / CLL
-  mcv         = c(low = 50,    high = 140),    # severe iron deficiency / megaloblastic
-  rcdw        = c(low = 9,     high = 35),     # very uniform / severe mixed deficiency
-  ap          = c(low = 5,     high = 2000)    # hypophosphatasia / Paget's
-)
-
-for (i in seq_len(nrow(results))) {
-  tid <- results$test_id[i]
-  if (tid %in% names(clinical_plausible)) {
-    clin <- clinical_plausible[[tid]]
-    old_low <- results$plausible_low[i]
-    old_high <- results$plausible_high[i]
-    results$plausible_low[i] <- min(results$plausible_low[i], clin["low"])
-    results$plausible_high[i] <- max(results$plausible_high[i], clin["high"])
-    if (results$plausible_low[i] != old_low || results$plausible_high[i] != old_high) {
-      cat(sprintf("  %s: widened [%.4f, %.4f] -> [%.4f, %.4f]\n",
-                  tid, old_low, old_high, results$plausible_low[i], results$plausible_high[i]))
-    }
-  }
-}
-
 #' # Unit-confusion tightening
 
 #+ unit-confusion
