@@ -390,8 +390,8 @@ function calculateResult() {
     } else if (isNaN(rawValues[i])) {
       // Missing value — not an error per se, just incomplete
     } else {
-      // All biomarker values must be positive (zero/negative indicates an input error)
-      if (rawValues[i] <= 0) {
+      // Reject zero/negative — but skip if plausible_low allows zero (e.g. CRP "not detectable")
+      if (rawValues[i] <= 0 && !(formTests[i].plausible_low !== null && formTests[i].plausible_low <= 0)) {
         markInputError(formTests[i].id, t('error_must_be_positive'));
         errors.push(t('error_positive_detail', formTests[i].name));
       }
