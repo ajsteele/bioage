@@ -32,6 +32,13 @@
 #
 # All ranges are in CANONICAL units as defined in config/tests.csv.
 
+# Install BioAge package if not already available
+if (!requireNamespace("BioAge", quietly = TRUE)) {
+  if (!requireNamespace("devtools", quietly = TRUE)) {
+    install.packages("devtools")
+  }
+  devtools::install_github("dayoonkwon/BioAge")
+}
 library(BioAge)
 
 # ── Locate repo paths ──
