@@ -24,6 +24,7 @@
   "prompt_enter_all_values": "Please enter all values above to calculate your biological age.",
 
   "range_implausible": "This value looks implausible ({0} typically {1}\u2013{2}). Please check the value and units.",
+  "range_suggest_unit": "Did you mean to select {0}?",
   "range_warning": "This value is outside the typical range ({0}\u2013{1} {2}). The result may still be valid if your value is correct.",
 
   "result_heading": "Result:",

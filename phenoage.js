@@ -403,8 +403,23 @@ function calculateResult() {
       if (rangeStatus === 'error') {
         var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i]);
         var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i]);
-        showRangeAlert(formTests[i].id, 'error',
-          t('range_implausible', selectedUnits[i], pLow, pHigh));
+        // Check if the raw value would be plausible in a different unit
+        var suggestedUnit = null;
+        if (formTests[i].units.length > 1) {
+          for (var u = 0; u < formTests[i].units.length; u++) {
+            if (u === unitIdx) continue;
+            var altCanon = rawValues[i] * formTests[i].to_canonical_factors[u];
+            if (checkRange(altCanon, formTests[i]) !== 'error') {
+              suggestedUnit = formTests[i].units[u];
+              break;
+            }
+          }
+        }
+        var msg = t('range_implausible', selectedUnits[i], pLow, pHigh);
+        if (suggestedUnit) {
+          msg += ' ' + t('range_suggest_unit', suggestedUnit);
+        }
+        showRangeAlert(formTests[i].id, 'error', msg);
         implausibleNames.push(formTests[i].name);
       } else if (rangeStatus === 'warning') {
         var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
