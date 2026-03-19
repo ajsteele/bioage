@@ -390,6 +390,7 @@ function calculateResult() {
   // Read biomarker values and selected units from the form
   var rawValues = [];
   var selectedUnits = [];
+  var implausibleNames = [];
 
   for (var i = 0; i < formTests.length; i++) {
     var valueElement = document.getElementById(formTests[i].id);
@@ -420,7 +421,7 @@ function calculateResult() {
           'This value looks implausible (' + selectedUnits[i] +
           ' typically ' + pLow + '–' + pHigh +
           '). Please check the value and units.');
-        errors.push(formTests[i].name + ' value is outside the plausible range');
+        implausibleNames.push(formTests[i].name);
       } else if (rangeStatus === 'warning') {
         var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
         var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i]);
@@ -545,6 +546,17 @@ function calculateResult() {
       ' value' + (defaultCount > 1 ? 's were' : ' was') +
       ' filled with population averages for your age. ' +
       'For the most accurate result, enter your actual test values.</em></p>';
+  }
+
+  // Warning if any values look implausible
+  if (implausibleNames.length > 0) {
+    resultField.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
+      (implausibleNames.length === 1
+        ? 'The value for ' + implausibleNames[0] + ' looks'
+        : 'The values for ' + implausibleNames.join(', ') + ' look') +
+      ' implausible. Please check ' +
+      (implausibleNames.length === 1 ? 'it' : 'them') +
+      ' and the selected units before relying on this result.</div>';
   }
 
   // CSV download button
@@ -695,7 +707,7 @@ function createFormElements() {
   var dobInput = document.createElement('input');
   dobInput.setAttribute('type', 'date');
   dobInput.setAttribute('id', 'dob');
-  dobInput.setAttribute('oninput', 'calculateResult()');
+  dobInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
   if (saved && saved.dob) dobInput.value = saved.dob;
   dobRow.appendChild(dobLabel);
   dobRow.appendChild(dobInput);
@@ -728,6 +740,14 @@ function createFormElements() {
   dateSection.appendChild(testdateRow);
 
   formDiv.appendChild(dateSection);
+
+  // DOB prompt — shown when date of birth is not yet entered
+  var dobPrompt = document.createElement('div');
+  dobPrompt.className = 'dob-prompt';
+  dobPrompt.id = 'dobPrompt';
+  dobPrompt.textContent = 'Please enter your date of birth above to get started.';
+  if (saved && saved.dob) dobPrompt.style.display = 'none';
+  formDiv.appendChild(dobPrompt);
 
   // Biomarker inputs table
   var formTable = document.createElement('table');
@@ -836,6 +856,13 @@ function createFormElements() {
 }
 
 // --- Fill missing values with age-appropriate population defaults ---
+
+function updateDobPrompt() {
+  var prompt = document.getElementById('dobPrompt');
+  if (!prompt) return;
+  var dobVal = document.getElementById('dob').value;
+  prompt.style.display = dobVal ? 'none' : '';
+}
 
 function showDefaultsMessage(text, type) {
   var section = document.getElementById('defaultsSection');
