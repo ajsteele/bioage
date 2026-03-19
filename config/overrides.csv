@@ -1,2 +1,3 @@
 test_id,field,value,reason
 crp,plausible_low,0.1,hsCRP assays report values 0.1-3 mg/L; setting floor at 0.1 prevents rejection of real hsCRP results while still catching zero/negative entry errors
+crp,plausible_high,500,Unit-confusion tightening caps at ~18 but CRP 50-300+ mg/L is real in severe sepsis; the mg/dL-as-mg/L confusion only produces falsely LOW values so high-end tightening is counterproductive
