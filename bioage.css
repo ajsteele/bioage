@@ -62,6 +62,12 @@
   border-radius: 4px;
 }
 
+.dob-prompt-error {
+  color: #842029;
+  background: #f8d7da;
+  border-color: #f5c2c7;
+}
+
 /* Informational alerts attached to form inputs */
 .input-alert {
   margin: 0.3em 0 0.2em;

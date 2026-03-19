@@ -354,40 +354,7 @@ function calculateResult() {
   clearInputErrors();
   var errors = [];
 
-  // Read DOB and test date
-  var dobInput = document.getElementById('dob');
-  var testdateInput = document.getElementById('testdate');
-  var dobVal = dobInput.value;
-  var testdateVal = testdateInput.value;
-
-  if (!dobVal || !testdateVal) {
-    resultField.innerHTML = '<p>Please enter your date of birth and test date above.</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    return;
-  }
-
-  var dob = new Date(dobVal + 'T00:00:00');
-  var testDate = new Date(testdateVal + 'T00:00:00');
-
-  if (isNaN(dob.getTime())) {
-    markInputError('dob', 'Invalid date');
-    errors.push('Invalid date of birth');
-  }
-  if (isNaN(testDate.getTime())) {
-    markInputError('testdate', 'Invalid date');
-    errors.push('Invalid test date');
-  }
-  if (testDate <= dob) {
-    markInputError('testdate', 'Must be after date of birth');
-    errors.push('Test date must be after date of birth');
-  }
-
-  var age = calculateAge(dob, testDate);
-  if (age < 0 || age > 150) {
-    errors.push('Calculated age (' + age.toFixed(1) + ') is out of range');
-  }
-
-  // Read biomarker values and selected units from the form
+  // Read biomarker values and selected units from the form (always, even without DOB)
   var rawValues = [];
   var selectedUnits = [];
   var implausibleNames = [];
@@ -439,11 +406,74 @@ function calculateResult() {
     return;
   }
 
-  // Check all required inputs are filled
+  // Check all biomarker inputs are filled
   var allFilled = true;
   for (var i = 0; i < rawValues.length; i++) {
     if (isNaN(rawValues[i])) { allFilled = false; break; }
   }
+
+  // Read DOB and test date
+  var dobInput = document.getElementById('dob');
+  var testdateInput = document.getElementById('testdate');
+  var dobVal = dobInput.value;
+  var testdateVal = testdateInput.value;
+  var dobPrompt = document.getElementById('dobPrompt');
+  var hasDates = dobVal && testdateVal;
+
+  if (!hasDates) {
+    // Show DOB prompt — escalate to error style if all biomarker values are filled
+    if (dobPrompt) {
+      dobPrompt.style.display = '';
+      if (allFilled) {
+        dobPrompt.className = 'dob-prompt dob-prompt-error';
+        dobPrompt.textContent = 'Please enter your date of birth' +
+          (!testdateVal ? ' and test date' : '') + ' to calculate your biological age.';
+      } else {
+        dobPrompt.className = 'dob-prompt';
+        dobPrompt.textContent = 'Please enter your date of birth above to get started.';
+      }
+    }
+    if (!allFilled) {
+      resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
+    } else {
+      resultField.innerHTML = '';
+    }
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
+  // Hide DOB prompt once dates are present
+  if (dobPrompt) dobPrompt.style.display = 'none';
+
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+
+  if (isNaN(dob.getTime())) {
+    markInputError('dob', 'Invalid date');
+    errors.push('Invalid date of birth');
+  }
+  if (isNaN(testDate.getTime())) {
+    markInputError('testdate', 'Invalid date');
+    errors.push('Invalid test date');
+  }
+  if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
+    markInputError('testdate', 'Must be after date of birth');
+    errors.push('Test date must be after date of birth');
+  }
+
+  if (errors.length > 0) {
+    resultField.innerHTML = '<p>Error: ' + errors.join('; ') + '</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
+  var age = calculateAge(dob, testDate);
+  if (age < 0 || age > 150) {
+    resultField.innerHTML = '<p>Error: Calculated age (' + age.toFixed(1) + ') is out of range</p>';
+    if (shareSection) shareSection.style.display = 'none';
+    return;
+  }
+
   if (!allFilled) {
     resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
     if (shareSection) shareSection.style.display = 'none';
@@ -861,7 +891,13 @@ function updateDobPrompt() {
   var prompt = document.getElementById('dobPrompt');
   if (!prompt) return;
   var dobVal = document.getElementById('dob').value;
-  prompt.style.display = dobVal ? 'none' : '';
+  if (dobVal) {
+    prompt.style.display = 'none';
+  } else {
+    prompt.style.display = '';
+    prompt.className = 'dob-prompt';
+    prompt.textContent = 'Please enter your date of birth above to get started.';
+  }
 }
 
 function showDefaultsMessage(text, type) {
