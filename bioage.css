@@ -98,3 +98,59 @@
 .share-buttons button:hover {
   background: #e0e0e0;
 }
+
+/* Default-value styling for population-average-filled inputs */
+.default-value {
+  color: #888;
+  font-style: italic;
+  background: #f9f9f9;
+}
+
+/* Defaults section */
+.defaults-section {
+  margin: 1em 0;
+}
+
+.defaults-section button {
+  font-size: 0.95em;
+  padding: 0.4em 1em;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+}
+
+.defaults-section button:hover {
+  background: #e0e0e0;
+}
+
+.defaults-note {
+  font-size: 0.8em;
+  color: #888;
+  margin: 0.3em 0 0;
+}
+
+/* CSV download button */
+.csv-download {
+  font-size: 0.9em;
+  padding: 0.3em 0.8em;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f5f5f5;
+}
+
+.csv-download:hover {
+  background: #e0e0e0;
+}
+
+/* localStorage notice */
+.storage-notice {
+  font-size: 0.85em;
+  color: #666;
+  margin: 0.5em 0;
+  padding: 0.4em 0.7em;
+  background: #f0f7ff;
+  border: 1px solid #d0e3f0;
+  border-radius: 4px;
+}

@@ -2,6 +2,7 @@
 var testDefs = [];       // from tests.csv: [{test_id, name, canonical_unit}]
 var conversions = {};    // from conversions.csv: {test_id: [{unit, to_canonical_factor}]}
 var model = null;        // from phenoage.json: full model definition
+var defaults = [];       // from defaults.csv: [{age, albumin, creatinine, ...}]
 
 var anchorUnitsSeparator = ',';
 var anchorKeysSeparator = ';';
@@ -28,11 +29,13 @@ function loadConfig() {
   return Promise.all([
     fetch('config/tests.csv').then(function(r) { return r.text(); }),
     fetch('config/conversions.csv').then(function(r) { return r.text(); }),
-    fetch('config/models/phenoage.json').then(function(r) { return r.json(); })
+    fetch('config/models/phenoage.json').then(function(r) { return r.json(); }),
+    fetch('config/defaults.csv').then(function(r) { return r.text(); })
   ]).then(function(results) {
     var testsCSV = results[0];
     var conversionsCSV = results[1];
     model = results[2];
+    var defaultsCSV = results[3];
 
     // Parse tests
     testDefs = parseCSV(testsCSV);
@@ -50,6 +53,15 @@ function loadConfig() {
         to_canonical_factor: parseFloat(row.to_canonical_factor)
       });
     }
+
+    // Parse defaults into array of {age, test_id: value, ...}
+    defaults = parseCSV(defaultsCSV).map(function(row) {
+      var parsed = { age: parseFloat(row.age) };
+      for (var key in row) {
+        if (key !== 'age') parsed[key] = parseFloat(row[key]);
+      }
+      return parsed;
+    }).sort(function(a, b) { return a.age - b.age; });
 
     // Build the form input list from the model's biomarkers,
     // enriched with test names from testDefs and available units from conversions
@@ -113,6 +125,30 @@ function getTodayString() {
     String(d.getDate()).padStart(2, '0');
 }
 
+// --- Age-stratified defaults (linear interpolation) ---
+
+// Returns the population median value for a given test_id at a given age,
+// in canonical units. Linearly interpolates between the ages in defaults.csv.
+function getDefaultForAge(age, test_id) {
+  if (!defaults || defaults.length === 0) return null;
+
+  // Clamp to the range of ages in the defaults table
+  if (age <= defaults[0].age) return defaults[0][test_id];
+  if (age >= defaults[defaults.length - 1].age) return defaults[defaults.length - 1][test_id];
+
+  // Find bracketing rows and interpolate
+  for (var i = 0; i < defaults.length - 1; i++) {
+    if (age >= defaults[i].age && age <= defaults[i + 1].age) {
+      var t = (age - defaults[i].age) / (defaults[i + 1].age - defaults[i].age);
+      var lo = defaults[i][test_id];
+      var hi = defaults[i + 1][test_id];
+      if (lo == null || hi == null || isNaN(lo) || isNaN(hi)) return null;
+      return lo + t * (hi - lo);
+    }
+  }
+  return null;
+}
+
 // --- Unit conversion engine ---
 
 function toCanonical(value, unit, test_id) {
@@ -141,10 +177,14 @@ function fromCanonical(value, targetUnit, test_id) {
 
 // --- Transforms ---
 
-function applyTransform(value, transform, canonicalValues) {
+function applyTransform(value, transform, canonicalValues, transformFloor) {
   if (!transform) return value;
 
   if (transform === 'log') {
+    // Apply floor if specified (e.g. NHANES III CRP detection limit of 0.22 mg/dL)
+    if (transformFloor != null && value < transformFloor) {
+      value = transformFloor;
+    }
     return Math.log(value);
   }
 
@@ -445,10 +485,10 @@ function calculateResult() {
       if (refBm && formIdx >= 0 && selectedUnits[formIdx] !== '%') {
         var refModelVal = fromCanonical(canonicalValues[refId], refBm.unit, refId);
         modelRefValues[refId] = refModelVal;
-        modelVal = applyTransform(modelVal, bm.transform, modelRefValues);
+        modelVal = applyTransform(modelVal, bm.transform, modelRefValues, bm.transform_floor);
       }
     } else {
-      modelVal = applyTransform(modelVal, bm.transform, {});
+      modelVal = applyTransform(modelVal, bm.transform, {}, bm.transform_floor);
     }
 
     console.log(bm.test_id + ': ' +
@@ -491,6 +531,26 @@ function calculateResult() {
     '">this link</a>. Please think carefully before doing so as these test results are ' +
     'private medical data, and with this many data points it is likely that your medical ' +
     'record could be uniquely identified using these values.</p>';
+
+  // Note if any values are population defaults
+  var defaultCount = 0;
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (input && input.classList.contains('default-value')) defaultCount++;
+  }
+  if (defaultCount > 0) {
+    resultField.innerHTML += '<p><em>Note: ' + defaultCount +
+      ' value' + (defaultCount > 1 ? 's were' : ' was') +
+      ' filled with population averages for your age. ' +
+      'For the most accurate result, enter your actual test values.</em></p>';
+  }
+
+  // CSV download button
+  resultField.innerHTML += '<p><button type="button" onclick="downloadCSV()" class="csv-download">' +
+    'Download values as CSV</button></p>';
+
+  // Save to localStorage
+  saveToLocalStorage();
 
   // Generate and show the share card
   generateShareCard(phenoAge, age, acceleration);
@@ -602,6 +662,22 @@ function nativeShare() {
 
 function createFormElements() {
   var saved = extractValuesFromAnchor(window.location.href);
+  var fromStorage = false;
+
+  // Fall back to localStorage if no URL anchor data
+  if (!saved || (saved.tests.length === 0 && !saved.dob)) {
+    var stored = loadFromLocalStorage();
+    if (stored && stored.tests && stored.tests.length > 0) {
+      saved = {
+        dob: stored.dob,
+        testdate: stored.testdate,
+        tests: stored.tests,
+        isLegacy: false
+      };
+      fromStorage = true;
+    }
+  }
+
   var formDiv = document.getElementById('phenoAgeForm');
   formDiv.innerHTML = '';
 
@@ -670,7 +746,7 @@ function createFormElements() {
     input.setAttribute('id', formTests[i].id);
     input.setAttribute('inputmode', 'numeric');
     input.setAttribute('placeholder', text_placeholder);
-    input.setAttribute('oninput', 'calculateResult()');
+    input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult()');
     // Restore from anchor — match by test id, not array index
     var savedTest = null;
     if (saved) {
@@ -710,9 +786,189 @@ function createFormElements() {
   form.appendChild(formTable);
   formDiv.appendChild(form);
 
+  // Restore default-value styling for fields loaded from localStorage
+  if (fromStorage) {
+    for (var i = 0; i < formTests.length; i++) {
+      var storedTest = null;
+      for (var k = 0; k < saved.tests.length; k++) {
+        if (saved.tests[k].id === formTests[i].id) { storedTest = saved.tests[k]; break; }
+      }
+      if (storedTest && storedTest.isDefault) {
+        var inp = document.getElementById(formTests[i].id);
+        if (inp) inp.classList.add('default-value');
+      }
+    }
+  }
+
+  // "Fill missing with defaults" button
+  var defaultsDiv = document.createElement('div');
+  defaultsDiv.className = 'defaults-section';
+  defaultsDiv.id = 'defaultsSection';
+  var defaultsBtn = document.createElement('button');
+  defaultsBtn.setAttribute('type', 'button');
+  defaultsBtn.textContent = 'Fill missing values with population averages for my age';
+  defaultsBtn.onclick = fillMissingWithDefaults;
+  defaultsDiv.appendChild(defaultsBtn);
+  var defaultsNote = document.createElement('p');
+  defaultsNote.className = 'defaults-note';
+  defaultsNote.textContent = 'Uses median values from the NHANES III population study for your age.';
+  defaultsDiv.appendChild(defaultsNote);
+  formDiv.appendChild(defaultsDiv);
+
+  // Storage notice
+  if (fromStorage) {
+    var storageDiv = document.createElement('div');
+    storageDiv.className = 'storage-notice';
+    storageDiv.id = 'storageNotice';
+    storageDiv.innerHTML = 'Your previous values were restored from this browser\'s storage. ' +
+      '<a href="#" onclick="clearLocalStorage(); return false;">Clear saved data</a>';
+    formDiv.appendChild(storageDiv);
+  }
+
   if (saved && saved.dob && saved.tests.length > 0) {
     calculateResult();
   }
+}
+
+// --- Fill missing values with age-appropriate population defaults ---
+
+function fillMissingWithDefaults() {
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+  if (!dobVal || !testdateVal) {
+    alert('Please enter your date of birth and test date first.');
+    return;
+  }
+
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+  if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) {
+    alert('Please enter valid dates first.');
+    return;
+  }
+
+  var age = calculateAge(dob, testDate);
+  var filled = 0;
+
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (input.value !== '') continue; // don't overwrite user values
+
+    var canonicalDefault = getDefaultForAge(age, formTests[i].id);
+    if (canonicalDefault == null) continue;
+
+    // Convert from canonical to the currently selected display unit
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var selectedUnit = unitSelect.options[unitSelect.selectedIndex].text;
+    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id);
+
+    // Use sensible precision
+    var rounded;
+    if (displayVal < 0.1) rounded = displayVal.toPrecision(2);
+    else if (displayVal < 10) rounded = displayVal.toFixed(2);
+    else if (displayVal < 100) rounded = displayVal.toFixed(1);
+    else rounded = displayVal.toFixed(0);
+
+    input.value = rounded;
+    input.classList.add('default-value');
+    filled++;
+  }
+
+  if (filled > 0) {
+    calculateResult();
+  } else {
+    alert('All fields are already filled in.');
+  }
+}
+
+// Clear default styling when user types in a field
+function clearDefaultStyling(input) {
+  input.classList.remove('default-value');
+}
+
+// --- CSV download ---
+
+function downloadCSV() {
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+
+  var lines = ['field,value,unit'];
+  lines.push('dob,' + dobVal + ',');
+  lines.push('test_date,' + testdateVal + ',');
+
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var unit = unitSelect.options[unitSelect.selectedIndex].text;
+    var isDefault = input.classList.contains('default-value') ? ' (population default)' : '';
+    lines.push(formTests[i].id + ',' + input.value + isDefault + ',' + unit);
+  }
+
+  // Add result if available
+  var resultEl = document.getElementById('phenoAgeResult');
+  var resultText = resultEl ? resultEl.textContent : '';
+  if (resultText.indexOf('Result:') !== -1) {
+    lines.push('');
+    lines.push('# Result');
+    // Extract the key numbers from the result display
+    var match = resultText.match(/([\d.]+) years \(age acceleration ([+-]?[\d.]+)/);
+    if (match) {
+      lines.push('phenoage,' + match[1] + ',years');
+      lines.push('acceleration,' + match[2] + ',years');
+    }
+  }
+
+  var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  var link = document.createElement('a');
+  link.download = 'phenoage-' + (testdateVal || 'results') + '.csv';
+  link.href = URL.createObjectURL(blob);
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+// --- localStorage persistence ---
+
+var STORAGE_KEY = 'phenoage_last_entry';
+
+function saveToLocalStorage() {
+  try {
+    var data = {
+      dob: document.getElementById('dob').value,
+      testdate: document.getElementById('testdate').value,
+      tests: []
+    };
+    for (var i = 0; i < formTests.length; i++) {
+      var input = document.getElementById(formTests[i].id);
+      var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+      data.tests.push({
+        id: formTests[i].id,
+        value: input.value,
+        unit: unitSelect.options[unitSelect.selectedIndex].text,
+        isDefault: input.classList.contains('default-value')
+      });
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // localStorage may be unavailable (private browsing, etc.)
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    var json = localStorage.getItem(STORAGE_KEY);
+    if (!json) return null;
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearLocalStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    var notice = document.getElementById('storageNotice');
+    if (notice) notice.textContent = 'Saved data cleared.';
+  } catch (e) {}
 }
 
 // --- Startup ---

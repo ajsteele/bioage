@@ -264,6 +264,58 @@ cat(strrep("=", 72), "\n\n")
 print(results[, c("test_id", "normal_low", "normal_high", "plausible_low", "plausible_high")],
       row.names = FALSE)
 
+# ── Age-stratified median defaults ──
+# Compute smoothed median values for each biomarker at each integer age.
+# Used by the web calculator to fill in missing values with population defaults.
+# Strategy: compute raw medians at each integer age, then LOESS-smooth them
+# to handle noisy estimates at sparse ages.
+
+cat("\n\n", strrep("=", 72), "\n")
+cat("Age-stratified median defaults (LOESS-smoothed)\n")
+cat(strrep("=", 72), "\n\n")
+
+# Integer ages present in the data
+age_range <- 20:84  # PhenoAge training range
+
+medians_df <- data.frame(age = age_range)
+
+for (i in seq_len(nrow(biomarker_map))) {
+  tid <- biomarker_map$test_id[i]
+  col <- biomarker_map$column[i]
+  conv <- biomarker_map$to_canonical[i]
+
+  vals <- NHANES3[[col]] * conv
+  ages <- floor(NHANES3$age)
+
+  # Compute raw median at each integer age
+  raw_medians <- sapply(age_range, function(a) {
+    v <- vals[ages == a & !is.na(vals)]
+    if (length(v) >= 5) median(v) else NA
+  })
+
+  # LOESS smooth (span chosen to be fairly smooth but follow real trends)
+  valid <- !is.na(raw_medians)
+  if (sum(valid) >= 10) {
+    fit <- loess(raw_medians[valid] ~ age_range[valid], span = 0.4)
+    smoothed <- predict(fit, newdata = data.frame(x = age_range))
+    # Use smoothed where available, raw where not
+    smoothed[!valid & is.na(smoothed)] <- NA
+  } else {
+    smoothed <- raw_medians
+  }
+
+  medians_df[[tid]] <- round(smoothed, 4)
+
+  cat(sprintf("  %s: smoothed %d ages (%.1f–%.1f range)\n",
+              tid, sum(!is.na(smoothed)),
+              min(smoothed, na.rm = TRUE), max(smoothed, na.rm = TRUE)))
+}
+
+# Write age-stratified medians
+medians_path <- file.path(config_dir, "defaults.csv")
+write.csv(medians_df, medians_path, row.names = FALSE)
+cat("\nWritten:", medians_path, "\n")
+
 # ── Write to config/tests.csv ──
 tests_csv <- read.csv(file.path(config_dir, "tests.csv"),
                       stringsAsFactors = FALSE)
