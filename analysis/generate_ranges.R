@@ -55,12 +55,16 @@ if (!requireNamespace("BioAge", quietly = TRUE)) {
 library(BioAge)
 
 #+ paths
-# Locate repo root: works both when sourced (Rscript) and when spun (knitr)
-if (is_spinning) {
+# Locate repo root: sys.frame(1)$ofile exists when run via Rscript/source(),
+# but not when knitting via spin. Fall back to getwd() parent in that case.
+script_dir <- tryCatch(
+  dirname(sys.frame(1)$ofile),
+  error = function(e) NULL
+)
+if (is.null(script_dir) || script_dir == "") {
+  # Spinning or interactive: assume working directory is analysis/
   repo_dir <- normalizePath(file.path(getwd(), ".."))
 } else {
-  script_dir <- dirname(sys.frame(1)$ofile)
-  if (is.null(script_dir) || script_dir == "") script_dir <- "analysis"
   repo_dir <- normalizePath(file.path(script_dir, ".."))
 }
 config_dir <- file.path(repo_dir, "config")
