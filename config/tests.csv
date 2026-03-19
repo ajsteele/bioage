@@ -1,10 +1,10 @@
-test_id,name,canonical_unit,normal_low,normal_high,plausible_low,plausible_high
-albumin,Albumin,g/L,35,55,10,65
-creatinine,Creatinine,µmol/L,44,133,15,1800
-glucose,Glucose,mmol/L,3.3,7.8,1.0,50
-crp,C-reactive protein,mg/L,0.1,10,0.01,500
-wbc,White blood cell count,10⁹ cells/L,3.5,11.0,0.5,300
-lymphocyte,Lymphocytes,%,15,45,1,99
-mcv,Mean cell volume,fL,78,100,50,140
-rcdw,Red cell distribution width,%,11.5,14.5,9,35
-ap,Alkaline phosphatase,U/L,35,150,5,2000
+"test_id","name","canonical_unit","normal_low","normal_high","plausible_low","plausible_high"
+"albumin","Albumin","g/L",34,49,26,54
+"creatinine","Creatinine","µmol/L",43.14,119.5191,34.6535,212.8713
+"glucose","Glucose","mmol/L",4.0515,10.434,3.108,16.2615
+"crp","C-reactive protein","mg/L",0.21,1.98,0.05,4.2175
+"wbc","White blood cell count","10⁹ cells/L",3.9,12.2,2.65,16.7905
+"lymphocyte","Lymphocytes","%",16.7,51.8,7.9232,67.9362
+"mcv","Mean cell volume","fL",76.6,99.3662,63.3607,108.3
+"rcdw","Red cell distribution width","%",11.85,15.9,11.3,19.1
+"ap","Alkaline phosphatase","U/L",45,153,29,241.217
