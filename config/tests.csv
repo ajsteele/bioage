@@ -2,7 +2,7 @@
 "albumin","Albumin","g/L",34,49,26,54
 "creatinine","Creatinine","µmol/L",43.14,119.5191,34.6535,212.8713
 "glucose","Glucose","mmol/L",4.0515,10.434,3.108,16.2615
-"crp","C-reactive protein","mg/L",0.21,1.98,0.05,4.2175
+"crp","C-reactive protein","mg/L",0,1.98,0,4.2175
 "wbc","White blood cell count","10⁹ cells/L",3.9,12.2,2.65,16.7905
 "lymphocyte","Lymphocytes","%",16.7,51.8,7.9232,67.9362
 "mcv","Mean cell volume","fL",76.6,99.3662,63.3607,108.3
