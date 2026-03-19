@@ -83,7 +83,11 @@ function buildFormTests() {
       id: bm.test_id,
       name: testDef ? testDef.name : bm.test_id,
       units: units,
-      to_canonical_factors: factors
+      to_canonical_factors: factors,
+      normal_low: testDef && testDef.normal_low !== '' ? parseFloat(testDef.normal_low) : null,
+      normal_high: testDef && testDef.normal_high !== '' ? parseFloat(testDef.normal_high) : null,
+      plausible_low: testDef && testDef.plausible_low !== '' ? parseFloat(testDef.plausible_low) : null,
+      plausible_high: testDef && testDef.plausible_high !== '' ? parseFloat(testDef.plausible_high) : null
     });
   }
 }
@@ -236,11 +240,11 @@ function parseInput(value) {
 }
 
 function clearInputErrors() {
-  var errors = document.querySelectorAll('.errorNaN');
+  var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
   for (var i = 0; i < errors.length; i++) {
-    errors[i].classList.remove('errorNaN');
+    errors[i].classList.remove('errorNaN', 'input-error', 'input-warning');
   }
-  var msgs = document.querySelectorAll('.error-message');
+  var msgs = document.querySelectorAll('.error-message, .range-alert');
   for (var i = 0; i < msgs.length; i++) {
     msgs[i].remove();
   }
@@ -254,6 +258,48 @@ function markInputError(elementId, message) {
     msg.className = 'error-message';
     msg.textContent = ' ' + message;
     if (el && el.parentNode) el.parentNode.appendChild(msg);
+  }
+}
+
+// --- Range validation ---
+
+// Check a value (in canonical units) against normal and plausible ranges.
+// Returns 'ok', 'warning' (outside normal), or 'error' (outside plausible).
+function checkRange(canonicalValue, formTest) {
+  if (formTest.plausible_low !== null && canonicalValue < formTest.plausible_low) return 'error';
+  if (formTest.plausible_high !== null && canonicalValue > formTest.plausible_high) return 'error';
+  if (formTest.normal_low !== null && canonicalValue < formTest.normal_low) return 'warning';
+  if (formTest.normal_high !== null && canonicalValue > formTest.normal_high) return 'warning';
+  return 'ok';
+}
+
+// Format a canonical range value in the user's selected display unit
+function formatRangeInUnit(canonicalValue, unitIndex, formTest) {
+  var factor = formTest.to_canonical_factors[unitIndex];
+  var displayVal = canonicalValue / factor;
+  // Use sensible precision: more decimals for small numbers
+  if (displayVal < 0.1) return displayVal.toPrecision(2);
+  if (displayVal < 10) return displayVal.toFixed(2);
+  if (displayVal < 100) return displayVal.toFixed(1);
+  return displayVal.toFixed(0);
+}
+
+function showRangeAlert(elementId, level, message) {
+  var el = document.getElementById(elementId);
+  if (!el) return;
+  el.classList.add(level === 'error' ? 'input-error' : 'input-warning');
+  var row = el.closest('tr');
+  if (row) {
+    var alert = document.createElement('tr');
+    alert.className = 'range-alert';
+    var td = document.createElement('td');
+    td.setAttribute('colspan', '3');
+    var p = document.createElement('p');
+    p.className = level === 'error' ? 'input-alert input-alert-error' : 'input-alert';
+    p.textContent = message;
+    td.appendChild(p);
+    alert.appendChild(td);
+    row.parentNode.insertBefore(alert, row.nextSibling);
   }
 }
 
@@ -319,6 +365,27 @@ function calculateResult() {
       if (formTests[i].id === 'crp' && rawValues[i] <= 0) {
         markInputError('crp', 'Must be > 0');
         errors.push('CRP must be greater than 0 (required for logarithmic calculation)');
+      }
+
+      // Range validation: convert to canonical, check against ranges
+      var canonVal = toCanonical(rawValues[i], selectedUnits[i], formTests[i].id);
+      var rangeStatus = checkRange(canonVal, formTests[i]);
+      var unitIdx = formTests[i].units.indexOf(selectedUnits[i]);
+      if (rangeStatus === 'error') {
+        var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i]);
+        var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i]);
+        showRangeAlert(formTests[i].id, 'error',
+          'This value looks implausible (' + selectedUnits[i] +
+          ' typically ' + pLow + '–' + pHigh +
+          '). Please check the value and units.');
+        errors.push(formTests[i].name + ' value is outside the plausible range');
+      } else if (rangeStatus === 'warning') {
+        var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
+        var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i]);
+        showRangeAlert(formTests[i].id, 'warning',
+          'This value is outside the typical range (' +
+          nLow + '–' + nHigh + ' ' + selectedUnits[i] +
+          '). The result may still be valid if your value is correct.');
       }
     }
   }

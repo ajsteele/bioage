@@ -40,6 +40,17 @@
   font-size: 1em;
 }
 
+/* Range validation states on inputs */
+.input-warning {
+  border: 1px solid #ffc107;
+  background: #fffde7;
+}
+
+.input-error {
+  border: 1px solid #dc3545;
+  background: #fff5f5;
+}
+
 /* Informational alerts attached to form inputs */
 .input-alert {
   margin: 0.3em 0 0.2em;
@@ -49,6 +60,12 @@
   background: #fff3cd;
   border: 1px solid #ffecb5;
   border-radius: 4px;
+}
+
+.input-alert-error {
+  color: #842029;
+  background: #f8d7da;
+  border-color: #f5c2c7;
 }
 
 /* Share card */
