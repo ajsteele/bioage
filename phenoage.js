@@ -12,13 +12,15 @@ var text_placeholder = 'Enter a number';
 
 function parseCSV(text) {
   var lines = text.trim().split('\n');
-  var headers = lines[0].split(',');
+  var headers = lines[0].split(',').map(function(h) {
+    return h.trim().replace(/^"|"$/g, '');
+  });
   var rows = [];
   for (var i = 1; i < lines.length; i++) {
     var values = lines[i].split(',');
     var row = {};
     for (var j = 0; j < headers.length; j++) {
-      row[headers[j].trim()] = values[j].trim();
+      row[headers[j]] = values[j] ? values[j].trim().replace(/^"|"$/g, '') : '';
     }
     rows.push(row);
   }
@@ -746,7 +748,7 @@ function createFormElements() {
     input.setAttribute('id', formTests[i].id);
     input.setAttribute('inputmode', 'numeric');
     input.setAttribute('placeholder', text_placeholder);
-    input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult()');
+    input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult(); updateDefaultsButton()');
     // Restore from anchor — match by test id, not array index
     var savedTest = null;
     if (saved) {
@@ -806,6 +808,7 @@ function createFormElements() {
   defaultsDiv.id = 'defaultsSection';
   var defaultsBtn = document.createElement('button');
   defaultsBtn.setAttribute('type', 'button');
+  defaultsBtn.id = 'defaultsBtn';
   defaultsBtn.textContent = 'Fill missing values with population averages for my age';
   defaultsBtn.onclick = fillMissingWithDefaults;
   defaultsDiv.appendChild(defaultsBtn);
@@ -828,22 +831,45 @@ function createFormElements() {
   if (saved && saved.dob && saved.tests.length > 0) {
     calculateResult();
   }
+
+  updateDefaultsButton();
 }
 
 // --- Fill missing values with age-appropriate population defaults ---
+
+function showDefaultsMessage(text, type) {
+  var section = document.getElementById('defaultsSection');
+  if (!section) return;
+  var existing = section.querySelector('.defaults-message');
+  if (existing) existing.remove();
+  var msg = document.createElement('p');
+  msg.className = 'defaults-message' + (type === 'success' ? ' success' : '');
+  msg.textContent = text;
+  section.appendChild(msg);
+}
+
+function updateDefaultsButton() {
+  var btn = document.getElementById('defaultsBtn');
+  if (!btn) return;
+  var allFilled = formTests.every(function(t) {
+    var input = document.getElementById(t.id);
+    return input && input.value !== '';
+  });
+  btn.disabled = allFilled;
+}
 
 function fillMissingWithDefaults() {
   var dobVal = document.getElementById('dob').value;
   var testdateVal = document.getElementById('testdate').value;
   if (!dobVal || !testdateVal) {
-    alert('Please enter your date of birth and test date first.');
+    showDefaultsMessage('Please enter your date of birth and test date first.', 'warning');
     return;
   }
 
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
   if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) {
-    alert('Please enter valid dates first.');
+    showDefaultsMessage('Please enter valid dates first.', 'warning');
     return;
   }
 
@@ -875,10 +901,11 @@ function fillMissingWithDefaults() {
   }
 
   if (filled > 0) {
+    showDefaultsMessage('Filled ' + filled + ' field' + (filled > 1 ? 's' : '') + ' with population averages.', 'success');
     calculateResult();
-  } else {
-    alert('All fields are already filled in.');
   }
+
+  updateDefaultsButton();
 }
 
 // Clear default styling when user types in a field
