@@ -371,10 +371,10 @@ function calculateResult() {
     } else if (isNaN(rawValues[i])) {
       // Missing value — not an error per se, just incomplete
     } else {
-      // Validate CRP > 0 (required for log transform)
-      if (formTests[i].id === 'crp' && rawValues[i] <= 0) {
-        markInputError('crp', 'Must be > 0');
-        errors.push('CRP must be greater than 0 (required for logarithmic calculation)');
+      // All biomarker values must be positive (zero/negative indicates an input error)
+      if (rawValues[i] <= 0) {
+        markInputError(formTests[i].id, 'Must be > 0');
+        errors.push(formTests[i].name + ' must be greater than 0');
       }
 
       // Range validation: convert to canonical, check against ranges
