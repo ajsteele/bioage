@@ -6,7 +6,26 @@ var defaults = [];       // from defaults.csv: [{age, albumin, creatinine, ...}]
 
 var anchorUnitsSeparator = ',';
 var anchorKeysSeparator = ';';
-var text_placeholder = 'Enter a number';
+
+// --- Internationalisation ---
+
+var strings = {};
+
+function loadStrings(lang) {
+  lang = lang || 'en';
+  return fetch('strings/' + lang + '.json')
+    .then(function(r) { return r.json(); })
+    .then(function(data) { strings = data; });
+}
+
+/** Look up a translated string by key, with optional positional placeholders {0}, {1}, etc. */
+function t(key) {
+  var s = strings[key] || key;
+  for (var i = 1; i < arguments.length; i++) {
+    s = s.split('{' + (i - 1) + '}').join(arguments[i]);
+  }
+  return s;
+}
 
 // --- Config loading ---
 
@@ -367,14 +386,14 @@ function calculateResult() {
 
     if (isNaN(rawValues[i]) && valueElement.value !== '') {
       markInputError(formTests[i].id);
-      errors.push('Invalid value for ' + formTests[i].name);
+      errors.push(t('error_invalid_value', formTests[i].name));
     } else if (isNaN(rawValues[i])) {
       // Missing value — not an error per se, just incomplete
     } else {
       // All biomarker values must be positive (zero/negative indicates an input error)
       if (rawValues[i] <= 0) {
-        markInputError(formTests[i].id, 'Must be > 0');
-        errors.push(formTests[i].name + ' must be greater than 0');
+        markInputError(formTests[i].id, t('error_must_be_positive'));
+        errors.push(t('error_positive_detail', formTests[i].name));
       }
 
       // Range validation: convert to canonical, check against ranges
@@ -385,23 +404,19 @@ function calculateResult() {
         var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i]);
         var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i]);
         showRangeAlert(formTests[i].id, 'error',
-          'This value looks implausible (' + selectedUnits[i] +
-          ' typically ' + pLow + '–' + pHigh +
-          '). Please check the value and units.');
+          t('range_implausible', selectedUnits[i], pLow, pHigh));
         implausibleNames.push(formTests[i].name);
       } else if (rangeStatus === 'warning') {
         var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
         var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i]);
         showRangeAlert(formTests[i].id, 'warning',
-          'This value is outside the typical range (' +
-          nLow + '–' + nHigh + ' ' + selectedUnits[i] +
-          '). The result may still be valid if your value is correct.');
+          t('range_warning', nLow, nHigh, selectedUnits[i]));
       }
     }
   }
 
   if (errors.length > 0) {
-    resultField.innerHTML = '<p>Error: ' + errors.join('; ') + '</p>';
+    resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
   }
@@ -426,15 +441,15 @@ function calculateResult() {
       dobPrompt.style.display = '';
       if (allFilled) {
         dobPrompt.className = 'dob-prompt dob-prompt-error';
-        dobPrompt.textContent = 'Please enter your date of birth' +
-          (!testdateVal ? ' and test date' : '') + ' to calculate your biological age.';
+        dobPrompt.textContent = t('dob_prompt_error',
+          !testdateVal ? t('dob_prompt_error_and_test_date') : '');
       } else {
         dobPrompt.className = 'dob-prompt';
-        dobPrompt.textContent = 'Please enter your date of birth above to get started.';
+        dobPrompt.textContent = t('dob_prompt');
       }
     }
     if (!allFilled) {
-      resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
+      resultField.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
     } else {
       resultField.innerHTML = '';
     }
@@ -449,33 +464,33 @@ function calculateResult() {
   var testDate = new Date(testdateVal + 'T00:00:00');
 
   if (isNaN(dob.getTime())) {
-    markInputError('dob', 'Invalid date');
-    errors.push('Invalid date of birth');
+    markInputError('dob', t('error_invalid_date'));
+    errors.push(t('error_invalid_value', t('label_dob')));
   }
   if (isNaN(testDate.getTime())) {
-    markInputError('testdate', 'Invalid date');
-    errors.push('Invalid test date');
+    markInputError('testdate', t('error_invalid_date'));
+    errors.push(t('error_invalid_value', t('label_test_date')));
   }
   if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
-    markInputError('testdate', 'Must be after date of birth');
-    errors.push('Test date must be after date of birth');
+    markInputError('testdate', t('error_test_date_after_dob'));
+    errors.push(t('error_test_date_after_dob_detail'));
   }
 
   if (errors.length > 0) {
-    resultField.innerHTML = '<p>Error: ' + errors.join('; ') + '</p>';
+    resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
   }
 
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    resultField.innerHTML = '<p>Error: Calculated age (' + age.toFixed(1) + ') is out of range</p>';
+    resultField.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
   }
 
   if (!allFilled) {
-    resultField.innerHTML = '<p>Please enter all values above to calculate your biological age.</p>';
+    resultField.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
   }
@@ -547,23 +562,25 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    resultField.innerHTML = '<p>Could not calculate result. Please check your inputs.</p>';
+    resultField.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     return;
   }
 
-  resultField.innerHTML = '<p class="result"><strong>Result:</strong> ' +
-    phenoAge.toFixed(2) + ' years (age acceleration ' +
-    (acceleration >= 0 ? '+' : '') + acceleration.toFixed(2) + ' years)</p>';
-  resultField.innerHTML += '<p>Your chronological age at the test date: ' + age.toFixed(1) + ' years.</p>';
-  resultField.innerHTML += '<p>This means your risk of death from age-related causes ' +
-    'in the coming year is approximately ' + (riskOfDeath * 100).toFixed(2) +
-    '%, or around 1 in ' + parseFloat((1 / riskOfDeath).toPrecision(2)) + '.</p>';
-  resultField.innerHTML += '<p>You can access this result again or share it using <a href="' +
-    createAnchorFromValues(dobVal, testdateVal, formTests, rawValues, selectedUnits) +
-    '">this link</a>. Please think carefully before doing so as these test results are ' +
-    'private medical data, and with this many data points it is likely that your medical ' +
-    'record could be uniquely identified using these values.</p>';
+  var accelStr = (acceleration >= 0 ? '+' : '') + acceleration.toFixed(2);
+
+  // 1. Main result line
+  resultField.innerHTML = '<p class="result"><strong>' + t('result_heading') + '</strong> ' +
+    t('result_detail', phenoAge.toFixed(2), accelStr) + '</p>';
+
+  // 2. Share card (image + sharing buttons) — shown first below the result
+  generateShareCard(phenoAge, age, acceleration);
+
+  // 3. Additional details
+  resultField.innerHTML += '<p>' + t('result_chronological_age', age.toFixed(1)) + '</p>';
+  resultField.innerHTML += '<p>' + t('result_risk_of_death',
+    (riskOfDeath * 100).toFixed(2),
+    parseFloat((1 / riskOfDeath).toPrecision(2))) + '</p>';
 
   // Note if any values are population defaults
   var defaultCount = 0;
@@ -572,32 +589,44 @@ function calculateResult() {
     if (input && input.classList.contains('default-value')) defaultCount++;
   }
   if (defaultCount > 0) {
-    resultField.innerHTML += '<p><em>Note: ' + defaultCount +
-      ' value' + (defaultCount > 1 ? 's were' : ' was') +
-      ' filled with population averages for your age. ' +
-      'For the most accurate result, enter your actual test values.</em></p>';
+    resultField.innerHTML += '<p><em>' + t('result_defaults_note',
+      defaultCount,
+      defaultCount > 1 ? t('result_defaults_note_plural') : t('result_defaults_note_singular')) +
+      '</em></p>';
   }
 
   // Warning if any values look implausible
   if (implausibleNames.length > 0) {
+    var warningText = implausibleNames.length === 1
+      ? t('result_implausible_warning_one', implausibleNames[0])
+      : t('result_implausible_warning_many', implausibleNames.join(', '));
     resultField.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
-      (implausibleNames.length === 1
-        ? 'The value for ' + implausibleNames[0] + ' looks'
-        : 'The values for ' + implausibleNames.join(', ') + ' look') +
-      ' implausible. Please check ' +
-      (implausibleNames.length === 1 ? 'it' : 'them') +
-      ' and the selected units before relying on this result.</div>';
+      warningText + '</div>';
   }
 
-  // CSV download button
-  resultField.innerHTML += '<p><button type="button" onclick="downloadCSV()" class="csv-download">' +
-    'Download values as CSV</button></p>';
+  // 4. Save your result — separate section
+  var resultLink = createAnchorFromValues(dobVal, testdateVal, formTests, rawValues, selectedUnits);
+  resultField.innerHTML += '<div class="save-section">' +
+    '<h3>' + t('save_section_heading') + '</h3>' +
+    '<label for="resultLink">' + t('save_link_label') + '</label>' +
+    '<div class="save-link-row">' +
+      '<input type="text" id="resultLink" class="result-link-input" value="' +
+        resultLink.replace(/"/g, '&quot;') + '" readonly onclick="this.select()">' +
+      '<button type="button" class="copy-btn" onclick="copyResultLink()">' +
+        t('save_copy_button') + '</button>' +
+    '</div>' +
+    '<p class="save-privacy-note">' + t('save_privacy_note') + '</p>' +
+    '<div class="save-buttons">' +
+      '<button type="button" onclick="downloadCSV()" class="csv-download">' +
+        t('save_download_csv') + '</button>' +
+      '<button type="button" onclick="saveToLocalStorage(); showBrowserSaveConfirm()" class="save-browser-btn">' +
+        t('save_to_browser') + '</button>' +
+    '</div>' +
+    '<p class="save-browser-warning">' + t('save_browser_warning') + '</p>' +
+    '</div>';
 
-  // Save to localStorage
+  // Auto-save to localStorage on each calculation
   saveToLocalStorage();
-
-  // Generate and show the share card
-  generateShareCard(phenoAge, age, acceleration);
 }
 
 // --- Share card generation ---
@@ -608,6 +637,14 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   if (!canvas || !shareSection) return;
 
   shareSection.style.display = 'block';
+
+  // Update share section text from strings
+  var shareHeading = document.getElementById('shareHeading');
+  if (shareHeading) shareHeading.textContent = t('share_heading');
+  var shareNote = document.getElementById('shareNote');
+  if (shareNote) shareNote.textContent = t('share_image_note');
+  var downloadBtn = document.getElementById('downloadImageBtn');
+  if (downloadBtn) downloadBtn.textContent = t('share_download_image');
 
   var ctx = canvas.getContext('2d');
   var w = canvas.width;
@@ -634,7 +671,7 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   ctx.fillStyle = '#333';
   ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('MY BIOLOGICAL AGE', w / 2, 50);
+  ctx.fillText(t('card_title'), w / 2, 50);
 
   // Big biological age number
   ctx.fillStyle = acceleration <= 0 ? '#2e7d32' : '#e65100';
@@ -645,11 +682,11 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   var deltaText;
   var absDelta = Math.abs(acceleration).toFixed(1);
   if (acceleration <= -0.5) {
-    deltaText = absDelta + ' years younger than my real age';
+    deltaText = t('card_younger', absDelta);
   } else if (acceleration >= 0.5) {
-    deltaText = absDelta + ' years older than my real age';
+    deltaText = t('card_older', absDelta);
   } else {
-    deltaText = 'Right on track for my age';
+    deltaText = t('card_on_track');
   }
   ctx.fillStyle = '#555';
   ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -658,7 +695,7 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   // Chronological age
   ctx.fillStyle = '#777';
   ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('Chronological age: ' + Math.round(chronAge), w / 2, 225);
+  ctx.fillText(t('card_chronological_age', Math.round(chronAge)), w / 2, 225);
 
   // Divider line
   ctx.strokeStyle = '#ccc';
@@ -671,10 +708,10 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   // Call to action
   ctx.fillStyle = '#888';
   ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('Calculate yours at', w / 2, 278);
+  ctx.fillText(t('card_cta'), w / 2, 278);
   ctx.fillStyle = '#1565c0';
   ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('andrewsteele.co.uk/biological-age', w / 2, 300);
+  ctx.fillText(t('card_url'), w / 2, 300);
 }
 
 function downloadShareCard() {
@@ -693,13 +730,38 @@ function nativeShare() {
   canvas.toBlob(function(blob) {
     var file = new File([blob], 'my-biological-age.png', { type: 'image/png' });
     navigator.share({
-      title: 'My Biological Age',
-      text: 'Check out my biological age result!',
+      title: t('share_native_title'),
+      text: t('share_native_text'),
       files: [file]
     }).catch(function(err) {
       console.log('Share cancelled or failed:', err);
     });
   }, 'image/png');
+}
+
+// --- Result link copy / browser save ---
+
+function copyResultLink() {
+  var input = document.getElementById('resultLink');
+  if (!input) return;
+  input.select();
+  input.setSelectionRange(0, 99999); // mobile
+  navigator.clipboard.writeText(input.value).then(function() {
+    var btn = input.nextElementSibling;
+    if (btn) {
+      var original = btn.textContent;
+      btn.textContent = t('save_copied');
+      setTimeout(function() { btn.textContent = original; }, 2000);
+    }
+  });
+}
+
+function showBrowserSaveConfirm() {
+  var btn = document.querySelector('.save-browser-btn');
+  if (!btn) return;
+  var original = btn.textContent;
+  btn.textContent = t('save_to_browser_saved');
+  setTimeout(function() { btn.textContent = original; }, 2000);
 }
 
 // --- Form generation ---
@@ -733,7 +795,7 @@ function createFormElements() {
   dobRow.className = 'date-row';
   var dobLabel = document.createElement('label');
   dobLabel.setAttribute('for', 'dob');
-  dobLabel.textContent = 'Date of birth';
+  dobLabel.textContent = t('label_dob');
   var dobInput = document.createElement('input');
   dobInput.setAttribute('type', 'date');
   dobInput.setAttribute('id', 'dob');
@@ -744,9 +806,7 @@ function createFormElements() {
   if (saved && saved.isLegacy) {
     var legacyNote = document.createElement('p');
     legacyNote.className = 'input-alert';
-    legacyNote.textContent = 'Your test results were loaded from an older version of ' +
-      'this calculator which stored your age directly. Please enter your date of birth ' +
-      'and the date of the test so we can calculate your age more accurately.';
+    legacyNote.textContent = t('legacy_note');
     dobRow.appendChild(legacyNote);
   }
   dateSection.appendChild(dobRow);
@@ -755,7 +815,7 @@ function createFormElements() {
   testdateRow.className = 'date-row';
   var testdateLabel = document.createElement('label');
   testdateLabel.setAttribute('for', 'testdate');
-  testdateLabel.textContent = 'Test date';
+  testdateLabel.textContent = t('label_test_date');
   var testdateInput = document.createElement('input');
   testdateInput.setAttribute('type', 'date');
   testdateInput.setAttribute('id', 'testdate');
@@ -775,7 +835,7 @@ function createFormElements() {
   var dobPrompt = document.createElement('div');
   dobPrompt.className = 'dob-prompt';
   dobPrompt.id = 'dobPrompt';
-  dobPrompt.textContent = 'Please enter your date of birth above to get started.';
+  dobPrompt.textContent = t('dob_prompt');
   if (saved && saved.dob) dobPrompt.style.display = 'none';
   formDiv.appendChild(dobPrompt);
 
@@ -797,7 +857,7 @@ function createFormElements() {
     input.setAttribute('type', 'text');
     input.setAttribute('id', formTests[i].id);
     input.setAttribute('inputmode', 'numeric');
-    input.setAttribute('placeholder', text_placeholder);
+    input.setAttribute('placeholder', t('placeholder'));
     input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult(); updateDefaultsButton()');
     // Restore from anchor — match by test id, not array index
     var savedTest = null;
@@ -859,12 +919,12 @@ function createFormElements() {
   var defaultsBtn = document.createElement('button');
   defaultsBtn.setAttribute('type', 'button');
   defaultsBtn.id = 'defaultsBtn';
-  defaultsBtn.textContent = 'Fill missing values with population averages for my age';
+  defaultsBtn.textContent = t('defaults_button');
   defaultsBtn.onclick = fillMissingWithDefaults;
   defaultsDiv.appendChild(defaultsBtn);
   var defaultsNote = document.createElement('p');
   defaultsNote.className = 'defaults-note';
-  defaultsNote.textContent = 'Uses median values from the NHANES III population study for your age.';
+  defaultsNote.textContent = t('defaults_note');
   defaultsDiv.appendChild(defaultsNote);
   formDiv.appendChild(defaultsDiv);
 
@@ -873,8 +933,8 @@ function createFormElements() {
     var storageDiv = document.createElement('div');
     storageDiv.className = 'storage-notice';
     storageDiv.id = 'storageNotice';
-    storageDiv.innerHTML = 'Your previous values were restored from this browser\'s storage. ' +
-      '<a href="#" onclick="clearLocalStorage(); return false;">Clear saved data</a>';
+    storageDiv.innerHTML = t('storage_restored') + ' ' +
+      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
     formDiv.appendChild(storageDiv);
   }
 
@@ -896,7 +956,7 @@ function updateDobPrompt() {
   } else {
     prompt.style.display = '';
     prompt.className = 'dob-prompt';
-    prompt.textContent = 'Please enter your date of birth above to get started.';
+    prompt.textContent = t('dob_prompt');
   }
 }
 
@@ -925,14 +985,14 @@ function fillMissingWithDefaults() {
   var dobVal = document.getElementById('dob').value;
   var testdateVal = document.getElementById('testdate').value;
   if (!dobVal || !testdateVal) {
-    showDefaultsMessage('Please enter your date of birth and test date first.', 'warning');
+    showDefaultsMessage(t('defaults_need_dates'), 'warning');
     return;
   }
 
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
   if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) {
-    showDefaultsMessage('Please enter valid dates first.', 'warning');
+    showDefaultsMessage(t('defaults_need_valid_dates'), 'warning');
     return;
   }
 
@@ -964,7 +1024,7 @@ function fillMissingWithDefaults() {
   }
 
   if (filled > 0) {
-    showDefaultsMessage('Filled ' + filled + ' field' + (filled > 1 ? 's' : '') + ' with population averages.', 'success');
+    showDefaultsMessage(t('defaults_filled', filled, filled > 1 ? t('defaults_filled_plural') : t('defaults_filled_singular')), 'success');
     calculateResult();
   }
 
@@ -1057,18 +1117,20 @@ function clearLocalStorage() {
   try {
     localStorage.removeItem(STORAGE_KEY);
     var notice = document.getElementById('storageNotice');
-    if (notice) notice.textContent = 'Saved data cleared.';
+    if (notice) notice.textContent = t('storage_cleared');
   } catch (e) {}
 }
 
 // --- Startup ---
 
 window.onload = function() {
-  loadConfig().then(function() {
+  loadStrings('en').then(function() {
+    return loadConfig();
+  }).then(function() {
     createFormElements();
   }).catch(function(err) {
     console.error('Failed to load config:', err);
     document.getElementById('phenoAgeForm').innerHTML =
-      '<p>Error loading calculator configuration. Please try refreshing the page.</p>';
+      '<p>' + t('error_config_failed') + '</p>';
   });
 };
