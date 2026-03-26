@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>‘PhenoAge’ biological age calculator</title>
+
+  <!-- SEO: credit this content to the parent page, not the iframe URL -->
+  <link rel="canonical" href="https://thelongevityinitiative.org/calculators/phenoage/">
+  <meta name="robots" content="noindex">
+
+  <!-- Encourage browsers to send Referer header when embedded externally -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <!-- Future-proof light/dark mode support -->
+  <meta name="color-scheme" content="light dark">
+
+  <title>’PhenoAge’ biological age calculator — The Longevity Initiative</title>
+
   <link rel="stylesheet" href="fonts/inter.css">
   <link rel="stylesheet" href="bioage.css">
   <script src="vendor/modern-screenshot.js"></script>
   <script src="phenoage.js"></script>
 </head>
 <body>
-  <h1>‘PhenoAge’ biological age calculator</h1>
+  <h1>’PhenoAge’ biological age calculator</h1>
 
   <p>If you have the results for the following blood tests, you can use them to calculate an estimate of your ‘biological age’. This webpage is currently in beta so if you spot any mistakes please <a href="https://andrewsteele.co.uk/contact/">contact Andrew Steele</a> or, even better, <a href="https://github.com/ajsteele/bioage/issues">raise an issue</a> or make a pull request at <a href="https://github.com/ajsteele/bioage">github.com/ajsteele/bioage</a>.</p>
 
@@ -32,7 +44,7 @@
     </div>
     <script>
       if (navigator.share && navigator.canShare) {
-        document.getElementById('nativeShareBtn').style.display = '';
+        document.getElementById(‘nativeShareBtn’).style.display = ‘’;
       }
     </script>
   </div>
@@ -42,5 +54,33 @@
   <p>This calculator allows you to work out your ‘phenotypic age’ (or PhenoAge for short) as described in <a href="https://www.aging-us.com/article/101414/text">Levine et al. 2018</a>.</p>
 
   <p>This website never stores your data. You can only access previous results by bookmarking the URL provided, and the results are stored in the URL ‘anchor’ (the bit after the <code>#</code> symbol) which is never transmitted to the server—all the calculations are done locally in your web browser.</p>
+
+  <p class="embed-link">Want to embed this calculator on your website? <a href="https://thelongevityinitiative.org/embed/#calculators/phenoage">Get the embed code</a>.</p>
+
+  <!-- Embed support: notify parent iframe of height changes -->
+  <script>
+    (function() {
+      function notifyParentOfHeight() {
+        window.parent.postMessage(
+          { type: ‘li-calculator-resize’, height: document.documentElement.scrollHeight },
+          ‘*’
+        );
+      }
+
+      // ResizeObserver catches all DOM/layout changes (form build, results, share card)
+      if (window.ResizeObserver) {
+        new ResizeObserver(notifyParentOfHeight).observe(document.documentElement);
+      }
+      // Fallback for older browsers
+      window.addEventListener(‘resize’, notifyParentOfHeight);
+      // Initial notification once content is ready
+      document.addEventListener(‘DOMContentLoaded’, notifyParentOfHeight);
+
+      // Read embed config from URL params (future: theme, accent colour, etc.)
+      window.embedConfig = Object.fromEntries
+        ? Object.fromEntries(new URLSearchParams(window.location.search))
+        : {};
+    })();
+  </script>
 </body>
 </html>
