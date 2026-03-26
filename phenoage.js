@@ -828,7 +828,7 @@ function generateResultCardHTML(rawBioAge, rawChronoAge, urlDisplay, methodology
   return '<div class="share-card" role="img" aria-label="' + ariaLabel.replace(/"/g, '&quot;') + '">' +
     '<div class="share-card-inner" style="width:600px; height:600px; background-color:' + theme.bg +
     '; color:#ffffff; padding:40px; box-sizing:border-box; display:flex; flex-direction:column;' +
-    ' justify-content:space-between; font-family:system-ui,-apple-system,sans-serif;">' +
+    ' justify-content:space-between; font-family:Inter,system-ui,-apple-system,sans-serif;">' +
 
     // Header
     '<div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">' +
