@@ -669,8 +669,9 @@ function calculateResult() {
 
 // --- Share card generation ---
 
-// Cached PNG blob from the most recent card render
+// Cached PNG blob and filename from the most recent card render
 var shareCardBlob = null;
+var shareCardFilename = 'my-biological-age.png';
 
 function generateShareCard(bioAge, chronAge, acceleration) {
   var shareSection = document.getElementById('shareSection');
@@ -692,26 +693,34 @@ function generateShareCard(bioAge, chronAge, acceleration) {
     bioAge, chronAge, t('card_url'), t('card_methodology')
   );
 
+  // Compute a descriptive filename
+  var roundedBio = Math.round(bioAge);
+  var flooredChrono = Math.floor(chronAge);
+  shareCardFilename = 'my-biological-age-phenoage-' + roundedBio + '-' + flooredChrono + '.png';
+
   // Generate PNG for right-click saving and download/share buttons
   shareCardBlob = null;
   var cardEl = container.querySelector('.share-card-inner');
   if (cardEl && window.modernScreenshot) {
     modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
       .then(function(dataUrl) {
-        var img = document.getElementById('shareCardImage');
-        if (img) {
-          img.src = dataUrl;
-          img.alt = t('card_aria_label', Math.round(bioAge),
-            Math.floor(chronAge), badgeTextFor(acceleration));
-          img.style.display = 'block';
-          // Hide the HTML card, show the image instead for right-click saving
-          container.style.display = 'none';
-        }
-        // Pre-convert to blob for download/share
+        // Convert data URL to a named object URL for right-click "Save image as"
         return fetch(dataUrl).then(function(r) { return r.blob(); });
       })
       .then(function(blob) {
         shareCardBlob = blob;
+        var objectUrl = URL.createObjectURL(blob);
+        // Wrap image in an <a> with download attribute so right-click uses our filename
+        var wrapper = document.getElementById('shareCardImageLink');
+        var img = document.getElementById('shareCardImage');
+        if (wrapper && img) {
+          wrapper.href = objectUrl;
+          wrapper.download = shareCardFilename;
+          img.src = objectUrl;
+          img.alt = t('card_aria_label', roundedBio, flooredChrono, badgeTextFor(acceleration));
+          wrapper.style.display = 'block';
+          container.style.display = 'none';
+        }
       })
       .catch(function(err) {
         console.log('PNG generation failed, HTML card will remain visible:', err);
@@ -850,10 +859,10 @@ function generateResultCardHTML(rawBioAge, rawChronoAge, urlDisplay, methodology
 
     // Footer / CTA
     '<div style="text-align:center;">' +
-    '<p style="font-size:22px; opacity:0.7; margin:0; font-weight:300;">' + t('card_cta') + '</p>' +
-    '<p style="font-size:42px; font-weight:400; margin:-4px 0 8px 0;">' + urlDisplay + '</p>' +
-    '<p style="font-size:14px; opacity:0.4; margin:0; font-weight:300;">' +
-    t('card_methodology') + '</p></div>' +
+    '<p style="font-size:18px; opacity:0.7; margin:0; font-weight:300;">' + t('card_cta') + '</p>' +
+    '<p style="font-size:28px; font-weight:400; margin:2px 0 6px 0;">' + urlDisplay + '</p>' +
+    '<p style="font-size:13px; opacity:0.4; margin:0; font-weight:300;">' +
+    methodologyText + '</p></div>' +
 
     '</div></div>';
 }
@@ -861,7 +870,7 @@ function generateResultCardHTML(rawBioAge, rawChronoAge, urlDisplay, methodology
 function downloadShareCard() {
   if (shareCardBlob) {
     var link = document.createElement('a');
-    link.download = 'my-biological-age.png';
+    link.download = shareCardFilename;
     link.href = URL.createObjectURL(shareCardBlob);
     link.click();
     URL.revokeObjectURL(link.href);
@@ -874,7 +883,7 @@ function downloadShareCard() {
     modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
       .then(function(dataUrl) {
         var link = document.createElement('a');
-        link.download = 'my-biological-age.png';
+        link.download = shareCardFilename;
         link.href = dataUrl;
         link.click();
       });
@@ -885,7 +894,7 @@ function nativeShare() {
   if (!navigator.share) return;
   var blob = shareCardBlob;
   if (!blob) return;
-  var file = new File([blob], 'my-biological-age.png', { type: 'image/png' });
+  var file = new File([blob], shareCardFilename, { type: 'image/png' });
   navigator.share({
     title: t('share_native_title'),
     text: t('share_native_text'),
