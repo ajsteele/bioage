@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Embed a calculator — The Longevity Initiative</title>
-  <link rel="stylesheet" href="../fonts/inter.css">
+  <link rel="stylesheet" href="shared/fonts/inter.css">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -168,7 +168,7 @@
                     window.location.hostname === 'localhost' ||
                     window.location.hostname === '127.0.0.1';
       if (isLocal) {
-        return calc.path.replace('calculators/', '../');
+        return calc.path;
       }
       return EMBED_BASE + calc.path;
     }
