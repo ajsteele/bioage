@@ -96,6 +96,14 @@
   border-radius: 4px;
 }
 
+/* Severe result warning (many defaults / all defaults) */
+.result-warning-severe {
+  color: #664d03;
+  background: #fff3cd;
+  border-color: #ffecb5;
+  font-weight: bold;
+}
+
 /* Share card */
 #shareSection {
   margin-top: 1.5em;

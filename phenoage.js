@@ -597,17 +597,30 @@ function calculateResult() {
     (riskOfDeath * 100).toFixed(2),
     parseFloat((1 / riskOfDeath).toPrecision(2))) + '</p>';
 
-  // Note if any values are population defaults
+  // Note if any values are population defaults — graduated warning
   var defaultCount = 0;
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
     if (input && input.classList.contains('default-value')) defaultCount++;
   }
   if (defaultCount > 0) {
-    resultField.innerHTML += '<p><em>' + t('result_defaults_note',
-      defaultCount,
-      defaultCount > 1 ? t('result_defaults_note_plural') : t('result_defaults_note_singular')) +
-      '</em></p>';
+    var totalTests = formTests.length;
+    var warningKey;
+    if (defaultCount >= totalTests) {
+      warningKey = 'defaults_warning_all';
+    } else if (defaultCount >= Math.ceil(totalTests * 2 / 3)) {
+      warningKey = 'defaults_warning_extreme';
+    } else if (defaultCount >= Math.ceil(totalTests / 3)) {
+      warningKey = 'defaults_warning_very';
+    } else if (defaultCount === 1) {
+      warningKey = 'defaults_warning_one';
+    } else {
+      warningKey = 'defaults_warning_few';
+    }
+    var level = (defaultCount >= Math.ceil(totalTests / 3)) ? 'error' : 'warning';
+    resultField.innerHTML += '<div class="result-warning' +
+      (level === 'error' ? ' result-warning-severe' : '') + '">' +
+      t(warningKey, defaultCount, totalTests) + '</div>';
   }
 
   // Warning if any values look implausible
