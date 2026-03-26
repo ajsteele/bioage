@@ -13,7 +13,7 @@ var strings = {};
 
 function loadStrings(lang) {
   lang = lang || 'en';
-  return fetch('strings/' + lang + '.json')
+  return fetch('strings/' + lang + '.json?v=' + Date.now())
     .then(function(r) { return r.json(); })
     .then(function(data) { strings = data; });
 }
