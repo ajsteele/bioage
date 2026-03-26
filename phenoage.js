@@ -644,17 +644,27 @@ function calculateResult() {
         t('save_copy_button') + '</button>' +
     '</div>' +
     '<p class="save-privacy-note">' + t('save_privacy_note') + '</p>' +
-    '<div class="save-buttons">' +
-      '<button type="button" onclick="downloadCSV()" class="csv-download">' +
-        t('save_download_csv') + '</button>' +
-      '<button type="button" onclick="saveToLocalStorage(); showBrowserSaveConfirm()" class="save-browser-btn">' +
-        t('save_to_browser') + '</button>' +
+
+    '<div class="save-option">' +
+      '<div class="save-buttons">' +
+        '<button type="button" onclick="downloadCSV()" class="csv-download">' +
+          t('save_download_csv') + '</button>' +
+        '<button type="button" onclick="uploadCSV()" class="csv-upload">' +
+          t('save_upload_csv') + '</button>' +
+        '<input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVUpload(this)">' +
+      '</div>' +
+      '<p class="save-option-note">' + t('save_csv_note') + '</p>' +
     '</div>' +
-    '<p class="save-browser-warning">' + t('save_browser_warning') + '</p>' +
+
+    '<div class="save-option">' +
+      '<div class="save-buttons">' +
+        '<button type="button" onclick="saveToLocalStorage(); showBrowserSaveConfirm()" class="save-browser-btn">' +
+          t('save_to_browser') + '</button>' +
+      '</div>' +
+      '<p class="save-option-note save-browser-warning">' + t('save_browser_warning') + '</p>' +
+    '</div>' +
     '</div>';
 
-  // Auto-save to localStorage on each calculation
-  saveToLocalStorage();
 }
 
 // --- Share card generation ---
@@ -1102,6 +1112,68 @@ function downloadCSV() {
   link.href = URL.createObjectURL(blob);
   link.click();
   URL.revokeObjectURL(link.href);
+}
+
+function uploadCSV() {
+  var input = document.getElementById('csvFileInput');
+  if (input) input.click();
+}
+
+function handleCSVUpload(fileInput) {
+  var file = fileInput.files[0];
+  if (!file) return;
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var lines = text.trim().split('\n');
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.charAt(0) === '#' || line.indexOf('field,') === 0) continue;
+
+      var parts = line.split(',');
+      var field = parts[0];
+      var value = parts[1];
+      var unit = parts[2];
+
+      if (field === 'dob') {
+        var dobInput = document.getElementById('dob');
+        if (dobInput && value) dobInput.value = value;
+      } else if (field === 'test_date') {
+        var tdInput = document.getElementById('testdate');
+        if (tdInput && value) tdInput.value = value;
+      } else {
+        // Biomarker value — strip " (population default)" suffix if present
+        var cleanValue = value.replace(/\s*\(population default\)/, '');
+        var input = document.getElementById(field);
+        if (input && cleanValue) {
+          input.value = cleanValue;
+          input.classList.remove('default-value');
+          // Set the matching unit if available
+          if (unit) {
+            var unitSelect = document.getElementById(field + 'Unit');
+            if (unitSelect) {
+              for (var j = 0; j < unitSelect.options.length; j++) {
+                if (unitSelect.options[j].text === unit) {
+                  unitSelect.selectedIndex = j;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    updateDobPrompt();
+    updateDefaultsButton();
+    calculateResult();
+  };
+  reader.readAsText(file);
+
+  // Reset so the same file can be re-uploaded
+  fileInput.value = '';
 }
 
 // --- localStorage persistence ---
