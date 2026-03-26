@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="../../shared/fonts/inter.css">
   <link rel="stylesheet" href="../../shared/embed.css">
   <link rel="stylesheet" href="dogyears.css">
+  <script src="../../shared/vendor/modern-screenshot.js"></script>
   <script src="dogyears.js"></script>
 </head>
 <body>
@@ -30,6 +31,32 @@
   </div>
 
   <div id="dogYearsResult" class="bioageform"></div>
+
+  <div id="shareSection" style="display: none;">
+    <h2 id="shareHeading">Share your result</h2>
+    <div id="photoUploadSection">
+      <label for="dogPhotoInput" class="photo-upload-label" id="photoUploadLabel">
+        <span id="photoUploadText">Add a photo of your dog</span>
+        <span class="photo-upload-hint" id="photoUploadHint">(optional — it will appear on the share card)</span>
+      </label>
+      <input type="file" id="dogPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(this)">
+      <div id="photoPreview" style="display:none;">
+        <img id="photoPreviewImg" alt="Your dog's photo">
+        <button type="button" id="photoRemoveBtn" onclick="removePhoto()">Remove photo</button>
+      </div>
+    </div>
+    <div id="shareCardContainer"></div>
+    <a id="shareCardImageLink" style="display:none;" download="my-dogs-age.png"><img id="shareCardImage" alt="" style="max-width:100%; height:auto; border-radius:4px;"></a>
+    <div class="share-buttons">
+      <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
+      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
+    </div>
+    <script>
+      if (navigator.share && navigator.canShare) {
+        document.getElementById('nativeShareBtn').style.display = '';
+      }
+    </script>
+  </div>
 
   <div id="aboutSection">
     <h2 id="aboutHeading">About</h2>

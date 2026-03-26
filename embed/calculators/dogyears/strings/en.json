@@ -19,6 +19,22 @@
   "result_difference_lower": "The epigenetic estimate is {0} years lower than the traditional formula.",
   "result_difference_same": "Both formulas give a similar result at this age.",
 
+  "share_heading": "Share your result",
+  "share_photo_label": "Add a photo of your dog",
+  "share_photo_hint": "(optional \u2014 it will appear on the share card)",
+  "share_photo_remove": "Remove photo",
+  "share_download": "Download image",
+  "share_native_title": "My Dog\u2019s Epigenetic Age",
+  "share_native_text": "My dog is {0} in human-equivalent years based on epigenetic aging!",
+
+  "card_title": "My Dog\u2019s Age",
+  "card_human_years": "human equivalent years",
+  "card_epigenetic": "based on epigenetic aging research",
+  "card_cta": "calculate yours at",
+  "card_url": "the-li.org/dogyears",
+  "card_branding": "The Longevity Initiative",
+  "card_aria_label": "Dog age share card: {0} human-equivalent years based on epigenetic aging",
+
   "about_heading": "About",
   "about_formula": "This calculator uses the formula <em>human age = 16 \u00d7 ln(dog age) + 31</em>, derived from a study of DNA methylation changes in Labrador retrievers.",
   "about_limitations": "This is a simplified approximation. Aging rates vary by breed and size\u2014smaller dogs generally live longer than larger breeds. The formula is most accurate for dogs over one year old.",
