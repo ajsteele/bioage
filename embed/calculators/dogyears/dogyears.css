@@ -1,0 +1,65 @@
+/* Dog years calculator — page-specific styles */
+
+.age-input-row {
+  display: flex;
+  gap: 1.5em;
+  margin: 1em 0;
+}
+
+.age-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.age-input-group label {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+
+.age-input-group input {
+  width: 6em;
+  font-size: 1.1em;
+  padding: 0.4em 0.6em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.age-input-group input:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: -1px;
+}
+
+/* Result display */
+.result-card {
+  margin: 1.5em 0;
+  padding: 1.2em 1.5em;
+  background: #f0f7ff;
+  border: 1px solid #d0e3f0;
+  border-radius: 8px;
+}
+
+.result-main {
+  font-size: 1.4em;
+  font-weight: 600;
+  color: #0066cc;
+  margin: 0 0 0.1em;
+}
+
+.result-sub {
+  font-size: 0.9em;
+  color: #666;
+  margin: 0 0 1em;
+}
+
+.result-traditional {
+  margin: 0.5em 0 0.3em;
+  font-size: 0.95em;
+}
+
+.result-difference {
+  font-size: 0.85em;
+  color: #888;
+  margin: 0.2em 0 0;
+}
