@@ -13,7 +13,7 @@ var strings = {};
 
 function loadStrings(lang) {
   lang = lang || 'en';
-  return fetch('strings/' + lang + '.json?v=' + Date.now())
+  return fetch('strings/' + lang + '.json')
     .then(function(r) { return r.json(); })
     .then(function(data) { strings = data; });
 }
@@ -669,10 +669,13 @@ function calculateResult() {
 
 // --- Share card generation ---
 
+// Cached PNG blob from the most recent card render
+var shareCardBlob = null;
+
 function generateShareCard(bioAge, chronAge, acceleration) {
   var shareSection = document.getElementById('shareSection');
-  var canvas = document.getElementById('shareCanvas');
-  if (!canvas || !shareSection) return;
+  var container = document.getElementById('shareCardContainer');
+  if (!container || !shareSection) return;
 
   shareSection.style.display = 'block';
 
@@ -684,97 +687,212 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   var downloadBtn = document.getElementById('downloadImageBtn');
   if (downloadBtn) downloadBtn.textContent = t('share_download_image');
 
-  var ctx = canvas.getContext('2d');
-  var w = canvas.width;
-  var h = canvas.height;
+  // Build the HTML card
+  container.innerHTML = generateResultCardHTML(
+    bioAge, chronAge, t('card_url'), t('card_methodology')
+  );
 
-  // Background gradient — green-ish for younger, amber for older
-  var grad = ctx.createLinearGradient(0, 0, w, h);
-  if (acceleration <= 0) {
-    grad.addColorStop(0, '#e8f5e9');
-    grad.addColorStop(1, '#c8e6c9');
-  } else {
-    grad.addColorStop(0, '#fff8e1');
-    grad.addColorStop(1, '#ffecb3');
+  // Generate PNG for right-click saving and download/share buttons
+  shareCardBlob = null;
+  var cardEl = container.querySelector('.share-card-inner');
+  if (cardEl && window.modernScreenshot) {
+    modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
+      .then(function(dataUrl) {
+        var img = document.getElementById('shareCardImage');
+        if (img) {
+          img.src = dataUrl;
+          img.alt = t('card_aria_label', Math.round(bioAge),
+            Math.floor(chronAge), badgeTextFor(acceleration));
+          img.style.display = 'block';
+          // Hide the HTML card, show the image instead for right-click saving
+          container.style.display = 'none';
+        }
+        // Pre-convert to blob for download/share
+        return fetch(dataUrl).then(function(r) { return r.blob(); });
+      })
+      .then(function(blob) {
+        shareCardBlob = blob;
+      })
+      .catch(function(err) {
+        console.log('PNG generation failed, HTML card will remain visible:', err);
+      });
   }
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+}
 
-  // Subtle border
-  ctx.strokeStyle = acceleration <= 0 ? '#66bb6a' : '#ffb74d';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, w - 4, h - 4);
+function badgeTextFor(acceleration) {
+  var diff = acceleration;
+  if (diff < -1) return t('card_younger', Math.abs(Math.round(diff)));
+  if (diff > 1) return t('card_older', Math.round(diff));
+  return t('card_on_track');
+}
 
-  // Title
-  ctx.fillStyle = '#333';
-  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(t('card_title'), w / 2, 50);
+function generateResultCardHTML(rawBioAge, rawChronoAge, urlDisplay, methodologyText) {
+  var bioAge = Math.round(Number(rawBioAge));
+  var chronoAge = Math.floor(Number(rawChronoAge));
+  var diff = bioAge - chronoAge;
 
-  // Big biological age number
-  ctx.fillStyle = acceleration <= 0 ? '#2e7d32' : '#e65100';
-  ctx.font = 'bold 80px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(Math.round(bioAge), w / 2, 150);
-
-  // "X years younger/older" text
-  var deltaText;
-  var absDelta = Math.abs(acceleration).toFixed(1);
-  if (acceleration <= -0.5) {
-    deltaText = t('card_younger', absDelta);
-  } else if (acceleration >= 0.5) {
-    deltaText = t('card_older', absDelta);
+  var badgeText, theme;
+  if (diff < -1) {
+    badgeText = t('card_younger', Math.abs(diff));
+    theme = { bg: '#125b4a', primary: '#5bc198', badgeBg: '#0d4236' };
+  } else if (diff >= -1 && diff <= 1) {
+    badgeText = t('card_on_track');
+    theme = { bg: '#1e3a8a', primary: '#60a5fa', badgeBg: '#172554' };
   } else {
-    deltaText = t('card_on_track');
+    badgeText = t('card_older', diff);
+    theme = { bg: '#78350f', primary: '#fbbf24', badgeBg: '#451a03' };
   }
-  ctx.fillStyle = '#555';
-  ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(deltaText, w / 2, 190);
 
-  // Chronological age
-  ctx.fillStyle = '#777';
-  ctx.font = '16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(t('card_chronological_age', Math.round(chronAge)), w / 2, 225);
+  // --- Number line geometry ---
+  var minAge = Math.min(bioAge, chronoAge);
+  var maxAge = Math.max(bioAge, chronoAge);
+  var midPoint = (bioAge + chronoAge) / 2;
+  var lowerDecade = Math.floor(minAge / 10) * 10;
+  var upperDecade = Math.ceil(maxAge / 10) * 10;
+  var radiusToLower = midPoint - lowerDecade;
+  var radiusToUpper = upperDecade - midPoint;
+  var radius = Math.max(radiusToLower, radiusToUpper, 5);
+  radius += 7;
+  var span = radius * 2;
+  var startVal = midPoint - radius;
+  var endVal = midPoint + radius;
+  var bioPercent = ((bioAge - startVal) / span) * 100;
+  var chronoPercent = ((chronoAge - startVal) / span) * 100;
 
-  // Divider line
-  ctx.strokeStyle = '#ccc';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(100, 250);
-  ctx.lineTo(w - 100, 250);
-  ctx.stroke();
+  // Label collision: if markers are within 4% of each other, stack them
+  var labelCollision = Math.abs(bioPercent - chronoPercent) < 4;
 
-  // Call to action
-  ctx.fillStyle = '#888';
-  ctx.font = '15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(t('card_cta'), w / 2, 278);
-  ctx.fillStyle = '#1565c0';
-  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(t('card_url'), w / 2, 300);
+  // Decade tick marks (skip if too close to either marker)
+  var ticksHTML = '';
+  var firstDecade = Math.max(0, Math.ceil(startVal / 10) * 10);
+  var lastDecade = Math.floor(endVal / 10) * 10;
+  for (var i = firstDecade; i <= lastDecade; i += 10) {
+    if (Math.abs(i - bioAge) <= 3 || Math.abs(i - chronoAge) <= 3) continue;
+    var tickPercent = ((i - startVal) / span) * 100;
+    ticksHTML += '<div style="position:absolute; top:72px; left:' + tickPercent +
+      '%; transform:translateX(-50%); text-align:center; z-index:1;">' +
+      '<span style="font-size:14px; color:rgba(255,255,255,0.4);">' + i + '</span></div>';
+  }
+
+  var highlightLeft = Math.min(bioPercent, chronoPercent);
+  var highlightWidth = Math.abs(bioPercent - chronoPercent);
+
+  // Biological marker (above the line)
+  var bioMarkerHTML;
+  if (labelCollision) {
+    // Stacked layout: both labels to one side
+    bioMarkerHTML = '<div style="position:absolute; bottom:74px; left:' + bioPercent +
+      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
+      '<span style="font-size:14px; color:' + theme.primary + ';">' + t('card_biological_label') +
+      ' ' + bioAge + '</span>' +
+      '<span style="font-size:14px; color:rgba(255,255,255,0.7); margin-top:2px;">' +
+      t('card_chronological_label') + ' ' + chronoAge + '</span>' +
+      '<div style="width:2px; height:10px; background:' + theme.primary + '; margin-top:4px; border-radius:2px;"></div>' +
+      '</div>';
+  } else {
+    bioMarkerHTML = '<div style="position:absolute; bottom:74px; left:' + bioPercent +
+      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
+      '<span style="font-size:14px; color:' + theme.primary + '; margin-bottom:2px;">' +
+      t('card_biological_label') + '</span>' +
+      '<span style="font-size:20px; color:' + theme.primary + '; font-weight:bold; background:' +
+      theme.bg + '; padding:0 6px; line-height:1; border-radius:4px;">' + bioAge + '</span>' +
+      '<div style="width:2px; height:10px; background:' + theme.primary + '; margin-top:4px; border-radius:2px;"></div>' +
+      '</div>';
+  }
+
+  // Chronological marker (below the line) — omit if labels are collapsed
+  var chronoMarkerHTML = '';
+  if (!labelCollision) {
+    chronoMarkerHTML = '<div style="position:absolute; top:64px; left:' + chronoPercent +
+      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
+      '<div style="width:2px; height:10px; background:rgba(255,255,255,0.7); margin-bottom:4px; border-radius:2px;"></div>' +
+      '<span style="font-size:20px; color:#ffffff; font-weight:bold; background:' + theme.bg +
+      '; padding:0 6px; line-height:1; border-radius:4px;">' + chronoAge + '</span>' +
+      '<span style="font-size:14px; color:rgba(255,255,255,0.7); margin-top:2px;">' +
+      t('card_chronological_label') + '</span></div>';
+  }
+
+  // Build the accessible card — aria-label on the wrapper, number line hidden from SR
+  var ariaLabel = t('card_aria_label', bioAge, chronoAge, badgeText);
+  var yearsOldLines = t('card_years_old_biologically').split('\n');
+
+  return '<div class="share-card" role="img" aria-label="' + ariaLabel.replace(/"/g, '&quot;') + '">' +
+    '<div class="share-card-inner" style="width:600px; height:600px; background-color:' + theme.bg +
+    '; color:#ffffff; padding:40px; box-sizing:border-box; display:flex; flex-direction:column;' +
+    ' justify-content:space-between; font-family:system-ui,-apple-system,sans-serif;">' +
+
+    // Header
+    '<div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">' +
+    '<p style="text-transform:uppercase; letter-spacing:2px; font-size:16px; opacity:0.8; margin:0; line-height:1;">' +
+    t('card_title') + '</p></div>' +
+
+    // Big number
+    '<div style="display:flex; flex-direction:column; align-items:center;">' +
+    '<div style="display:flex; align-items:center; gap:15px;">' +
+    '<span style="font-size:150px; font-weight:400; color:' + theme.primary +
+    '; line-height:0.8; letter-spacing:-4px;">' + bioAge + '</span>' +
+    '<span style="font-size:30px; text-align:left; line-height:1.2; font-weight:300;">' +
+    yearsOldLines.join('<br>') + '</span></div></div>' +
+
+    // Badge
+    '<div style="text-align:center; margin:40px 0 0;">' +
+    '<div style="background-color:' + theme.badgeBg +
+    '; display:inline-block; padding:10px 35px; border-radius:50px; font-size:26px; color:' +
+    theme.primary + '; font-weight:500;">' + badgeText + '</div></div>' +
+
+    // Number line (decorative — hidden from screen readers)
+    '<div aria-hidden="true" style="position:relative; height:130px; margin:0 20px;">' +
+    '<div style="position:absolute; top:58px; left:0; right:0; height:4px; background:rgba(255,255,255,0.2); border-radius:4px;"></div>' +
+    (highlightWidth > 0 ? '<div style="position:absolute; top:56px; left:calc(' + highlightLeft +
+      '% - 4px); width:calc(' + highlightWidth + '% + 8px); height:8px; background:' +
+      theme.primary + '; border-radius:4px; z-index:2;"></div>' : '') +
+    ticksHTML + bioMarkerHTML + chronoMarkerHTML + '</div>' +
+
+    // Footer / CTA
+    '<div style="text-align:center;">' +
+    '<p style="font-size:22px; opacity:0.7; margin:0; font-weight:300;">' + t('card_cta') + '</p>' +
+    '<p style="font-size:42px; font-weight:400; margin:-4px 0 8px 0;">' + urlDisplay + '</p>' +
+    '<p style="font-size:14px; opacity:0.4; margin:0; font-weight:300;">' +
+    t('card_methodology') + '</p></div>' +
+
+    '</div></div>';
 }
 
 function downloadShareCard() {
-  var canvas = document.getElementById('shareCanvas');
-  if (!canvas) return;
-  var link = document.createElement('a');
-  link.download = 'my-biological-age.png';
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  if (shareCardBlob) {
+    var link = document.createElement('a');
+    link.download = 'my-biological-age.png';
+    link.href = URL.createObjectURL(shareCardBlob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    return;
+  }
+  // Fallback: try to generate on the fly
+  var container = document.getElementById('shareCardContainer');
+  var cardEl = container && container.querySelector('.share-card-inner');
+  if (cardEl && window.modernScreenshot) {
+    modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
+      .then(function(dataUrl) {
+        var link = document.createElement('a');
+        link.download = 'my-biological-age.png';
+        link.href = dataUrl;
+        link.click();
+      });
+  }
 }
 
 function nativeShare() {
-  var canvas = document.getElementById('shareCanvas');
-  if (!canvas || !navigator.share) return;
-
-  canvas.toBlob(function(blob) {
-    var file = new File([blob], 'my-biological-age.png', { type: 'image/png' });
-    navigator.share({
-      title: t('share_native_title'),
-      text: t('share_native_text'),
-      files: [file]
-    }).catch(function(err) {
-      console.log('Share cancelled or failed:', err);
-    });
-  }, 'image/png');
+  if (!navigator.share) return;
+  var blob = shareCardBlob;
+  if (!blob) return;
+  var file = new File([blob], 'my-biological-age.png', { type: 'image/png' });
+  navigator.share({
+    title: t('share_native_title'),
+    text: t('share_native_text'),
+    files: [file]
+  }).catch(function(err) {
+    console.log('Share cancelled or failed:', err);
+  });
 }
 
 // --- Result link copy / browser save ---

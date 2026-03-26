@@ -109,10 +109,29 @@
   margin-top: 1.5em;
 }
 
-#shareCanvas {
-  display: block;
-  max-width: 100%;
-  height: auto;
+.share-card {
+  width: 100%;
+  max-width: 600px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.share-card-inner {
+  transform-origin: top left;
+}
+
+/* Scale inner 600px card to fit container */
+@media (max-width: 600px) {
+  .share-card-inner {
+    transform: scale(calc(100vw / 640));
+  }
+  .share-card {
+    height: calc(600px * (100vw / 640));
+  }
+}
+
+#shareCardImage {
+  max-width: 600px;
   border: 1px solid #ddd;
   border-radius: 4px;
 }

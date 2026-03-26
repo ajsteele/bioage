@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>‘PhenoAge’ biological age calculator</title>
   <link rel="stylesheet" href="bioage.css">
+  <script src="vendor/modern-screenshot.js"></script>
   <script src="phenoage.js"></script>
 </head>
 <body>
@@ -22,13 +23,13 @@
   <div id="shareSection" style="display: none;">
     <h2 id="shareHeading">Share your result</h2>
     <p id="shareNote">This image only shows your biological age result, not your blood test values.</p>
-    <canvas id="shareCanvas" width="600" height="315"></canvas>
+    <div id="shareCardContainer"></div>
+    <img id="shareCardImage" alt="" style="display:none; max-width:100%; height:auto; border-radius:4px; cursor:pointer;">
     <div class="share-buttons">
       <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
       <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
     </div>
     <script>
-      // Show native share button if Web Share API with files is supported
       if (navigator.share && navigator.canShare) {
         document.getElementById('nativeShareBtn').style.display = '';
       }
