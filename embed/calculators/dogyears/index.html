@@ -65,27 +65,49 @@
     <p id="aboutCitation"></p>
   </div>
 
-  <p class="embed-link">Want to embed this calculator on your website? <a href="https://thelongevityinitiative.org/embed/#calculators/dogyears">Get the embed code</a>.</p>
+  <p class="embed-link">Find out more at <a href="https://thelongevityinitiative.org/calculators/dogyears/">The Longevity Initiative</a>.</p>
 
-  <!-- Embed support: notify parent iframe of height changes -->
+  <!-- Embed support: theme, height resize, config -->
   <script>
     (function() {
+      // Read embed config from URL params
+      window.embedConfig = Object.fromEntries
+        ? Object.fromEntries(new URLSearchParams(window.location.search))
+        : {};
+
+      // Apply theme: default is light (LI brand), ?theme=dark or ?theme=auto
+      var theme = window.embedConfig.theme || 'light';
+      if (theme === 'dark' || theme === 'auto') {
+        document.documentElement.classList.add('theme-' + theme);
+      }
+      // Update color-scheme meta for native form controls
+      var colorScheme = document.querySelector('meta[name="color-scheme"]');
+      if (colorScheme) {
+        if (theme === 'dark') colorScheme.content = 'dark';
+        else if (theme === 'auto') colorScheme.content = 'light dark';
+        else colorScheme.content = 'light';
+      }
+
+      // Hide embed link on own site (when ?source=li)
+      if (window.embedConfig.source === 'li') {
+        document.addEventListener('DOMContentLoaded', function() {
+          var link = document.querySelector('.embed-link');
+          if (link) link.style.display = 'none';
+        });
+      }
+
+      // Notify parent iframe of height changes
       function notifyParentOfHeight() {
         window.parent.postMessage(
           { type: 'li-calculator-resize', height: document.documentElement.scrollHeight },
           '*'
         );
       }
-
       if (window.ResizeObserver) {
         new ResizeObserver(notifyParentOfHeight).observe(document.documentElement);
       }
       window.addEventListener('resize', notifyParentOfHeight);
       document.addEventListener('DOMContentLoaded', notifyParentOfHeight);
-
-      window.embedConfig = Object.fromEntries
-        ? Object.fromEntries(new URLSearchParams(window.location.search))
-        : {};
     })();
   </script>
 </body>

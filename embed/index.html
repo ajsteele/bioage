@@ -117,10 +117,16 @@
 
   <h2>2. Options</h2>
   <div class="options-grid">
+    <label for="optTheme">Theme</label>
+    <select id="optTheme" onchange="updateEmbed()">
+      <option value="light">Light (default)</option>
+      <option value="dark">Dark</option>
+      <option value="auto">Auto (follows user's OS setting)</option>
+    </select>
+
     <label for="optMaxWidth">Max width</label>
     <input type="text" id="optMaxWidth" value="800px" oninput="updateEmbed()">
   </div>
-  <p class="note">More options (theme, colours) coming soon.</p>
 
   <h2>3. Preview</h2>
   <iframe id="previewFrame" class="preview-frame" frameborder="0" scrolling="no" height="600" title="Calculator preview"></iframe>
@@ -163,20 +169,23 @@
       };
     }
 
+    function getThemeParam() {
+      var theme = document.getElementById('optTheme').value;
+      return theme === 'light' ? '' : '?theme=' + theme;
+    }
+
     function buildEmbedUrl(calc) {
       // For local development, use relative path; for production, use full URL
       var isLocal = window.location.protocol === 'file:' ||
                     window.location.hostname === 'localhost' ||
                     window.location.hostname === '127.0.0.1';
-      if (isLocal) {
-        return calc.path;
-      }
-      return EMBED_BASE + calc.path;
+      var base = isLocal ? calc.path : EMBED_BASE + calc.path;
+      return base + getThemeParam();
     }
 
     function generateSnippet(calc) {
       var maxWidth = document.getElementById('optMaxWidth').value || '800px';
-      var embedUrl = EMBED_BASE + calc.path;
+      var embedUrl = EMBED_BASE + calc.path + getThemeParam();
       var iframeId = 'li-calc-' + calc.id;
 
       return '<!-- ' + calc.name + ' by The Longevity Initiative -->\n' +
@@ -200,7 +209,9 @@
         '      e.data.type === \'li-calculator-resize\'\n' +
         '    ) {\n' +
         '      var iframe = document.getElementById(\'' + iframeId + '\');\n' +
-        '      if (iframe) iframe.style.height = (e.data.height + 32) + \'px\';\n' +
+        '      if (iframe && iframe.contentWindow === e.source) {\n' +
+        '        iframe.style.height = (e.data.height + 32) + \'px\';\n' +
+        '      }\n' +
         '    }\n' +
         '  });\n' +
         '<\/script>\n' +

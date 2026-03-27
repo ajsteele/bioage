@@ -1,21 +1,97 @@
+/* --- Theme: CSS custom properties --- */
+
+:root {
+  /* LI brand light (default) */
+  --calc-bg: #f8f7f4;
+  --calc-text: #1a1a2e;
+  --calc-text-muted: #555;
+  --calc-text-faint: #888;
+  --calc-accent: #0066cc;
+  --calc-link: #0066cc;
+  --calc-input-bg: #ffffff;
+  --calc-input-border: #ccc;
+  --calc-btn-bg: #f0f0ed;
+  --calc-btn-hover: #e2e2dd;
+  --calc-border: #ddd;
+  --calc-card-bg: #edf3fa;
+  --calc-card-border: #d0e3f0;
+
+  /* Semantic colours (don't change with theme) */
+  --calc-warning-text: #664d03;
+  --calc-warning-bg: #fff3cd;
+  --calc-warning-border: #ffecb5;
+  --calc-error-text: #842029;
+  --calc-error-bg: #f8d7da;
+  --calc-error-border: #f5c2c7;
+  --calc-success-text: #0f5132;
+  --calc-success-bg: #d1e7dd;
+  --calc-success-border: #badbcc;
+  --calc-info-text: #055160;
+  --calc-info-bg: #cff4fc;
+  --calc-info-border: #b6effb;
+}
+
+/* Dark theme */
+.theme-dark {
+  --calc-bg: #1a1a2e;
+  --calc-text: #e0e0e0;
+  --calc-text-muted: #aaa;
+  --calc-text-faint: #888;
+  --calc-accent: #5b9bd5;
+  --calc-link: #7db8f0;
+  --calc-input-bg: #2a2a3e;
+  --calc-input-border: #444;
+  --calc-btn-bg: #2a2a3e;
+  --calc-btn-hover: #3a3a4e;
+  --calc-border: #3a3a4e;
+  --calc-card-bg: #222240;
+  --calc-card-border: #3a3a5e;
+}
+
+/* Auto theme: follows user's OS preference */
+@media (prefers-color-scheme: dark) {
+  .theme-auto {
+    --calc-bg: #1a1a2e;
+    --calc-text: #e0e0e0;
+    --calc-text-muted: #aaa;
+    --calc-text-faint: #888;
+    --calc-accent: #5b9bd5;
+    --calc-link: #7db8f0;
+    --calc-input-bg: #2a2a3e;
+    --calc-input-border: #444;
+    --calc-btn-bg: #2a2a3e;
+    --calc-btn-hover: #3a3a4e;
+    --calc-border: #3a3a4e;
+    --calc-card-bg: #222240;
+    --calc-card-border: #3a3a5e;
+  }
+}
+
 /* Base typography */
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--calc-bg);
+  color: var(--calc-text);
+  padding: 0 0.5em;
+}
+
+a {
+  color: var(--calc-link);
 }
 
 .errorNaN {
-  color: red;
-  border: solid 1px red;
+  color: var(--calc-error-text);
+  border: solid 1px var(--calc-error-border);
 }
 
 .error-message {
-  color: red;
+  color: var(--calc-error-text);
   font-size: 0.85em;
 }
 
 .bioageform .result {
   font-size: 1.2em;
-  color: #0066cc;
+  color: var(--calc-accent);
 }
 
 .bioageform select:disabled {
@@ -23,7 +99,7 @@ body {
     border: none;
     display: inline;
     background: none;
-    color: #000000;
+    color: var(--calc-text);
 }
 
 /* Date of birth and test date section */
@@ -45,15 +121,25 @@ body {
   font-size: 1em;
 }
 
+/* Form inputs */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  background: var(--calc-input-bg);
+  color: var(--calc-text);
+  border: 1px solid var(--calc-input-border);
+}
+
 /* Range validation states on inputs */
 .input-warning {
-  border: 1px solid #ffc107;
-  background: #fffde7;
+  border: 1px solid var(--calc-warning-border);
+  background: var(--calc-warning-bg);
 }
 
 .input-error {
-  border: 1px solid #dc3545;
-  background: #fff5f5;
+  border: 1px solid var(--calc-error-border);
+  background: var(--calc-error-bg);
 }
 
 /* Prompt to enter DOB, shown above the biomarker table */
@@ -61,16 +147,16 @@ body {
   margin: 0.5em 0 1em;
   padding: 0.6em 0.8em;
   font-size: 0.95em;
-  color: #055160;
-  background: #cff4fc;
-  border: 1px solid #b6effb;
+  color: var(--calc-info-text);
+  background: var(--calc-info-bg);
+  border: 1px solid var(--calc-info-border);
   border-radius: 4px;
 }
 
 .dob-prompt-error {
-  color: #842029;
-  background: #f8d7da;
-  border-color: #f5c2c7;
+  color: var(--calc-error-text);
+  background: var(--calc-error-bg);
+  border-color: var(--calc-error-border);
 }
 
 /* Informational alerts attached to form inputs */
@@ -78,16 +164,16 @@ body {
   margin: 0.3em 0 0.2em;
   padding: 0.5em 0.7em;
   font-size: 0.85em;
-  color: #664d03;
-  background: #fff3cd;
-  border: 1px solid #ffecb5;
+  color: var(--calc-warning-text);
+  background: var(--calc-warning-bg);
+  border: 1px solid var(--calc-warning-border);
   border-radius: 4px;
 }
 
 .input-alert-error {
-  color: #842029;
-  background: #f8d7da;
-  border-color: #f5c2c7;
+  color: var(--calc-error-text);
+  background: var(--calc-error-bg);
+  border-color: var(--calc-error-border);
 }
 
 /* Warning banner shown under result when implausible values present */
@@ -95,17 +181,17 @@ body {
   margin: 0.8em 0;
   padding: 0.6em 0.8em;
   font-size: 0.9em;
-  color: #842029;
-  background: #f8d7da;
-  border: 1px solid #f5c2c7;
+  color: var(--calc-error-text);
+  background: var(--calc-error-bg);
+  border: 1px solid var(--calc-error-border);
   border-radius: 4px;
 }
 
 /* Severe result warning (many defaults / all defaults) */
 .result-warning-severe {
-  color: #664d03;
-  background: #fff3cd;
-  border-color: #ffecb5;
+  color: var(--calc-warning-text);
+  background: var(--calc-warning-bg);
+  border-color: var(--calc-warning-border);
   font-weight: bold;
 }
 
@@ -137,7 +223,7 @@ body {
 
 #shareCardImage {
   max-width: 600px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--calc-border);
   border-radius: 4px;
 }
 
@@ -150,20 +236,21 @@ body {
   padding: 0.4em 1.2em;
   margin-right: 0.5em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
 }
 
 .share-buttons button:hover {
-  background: #e0e0e0;
+  background: var(--calc-btn-hover);
 }
 
 /* Default-value styling for population-average-filled inputs */
 .default-value {
-  color: #888;
+  color: var(--calc-text-faint);
   font-style: italic;
-  background: #f9f9f9;
+  background: var(--calc-btn-bg);
 }
 
 /* Defaults section */
@@ -175,13 +262,14 @@ body {
   font-size: 0.95em;
   padding: 0.4em 1em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
 }
 
 .defaults-section button:hover:not(:disabled) {
-  background: #e0e0e0;
+  background: var(--calc-btn-hover);
 }
 
 .defaults-section button:disabled {
@@ -194,20 +282,20 @@ body {
   padding: 0.4em 0.6em;
   margin: 0.4em 0 0;
   border-radius: 4px;
-  background: #fff3cd;
-  color: #664d03;
-  border: 1px solid #ffecb5;
+  background: var(--calc-warning-bg);
+  color: var(--calc-warning-text);
+  border: 1px solid var(--calc-warning-border);
 }
 
 .defaults-message.success {
-  background: #d1e7dd;
-  color: #0f5132;
-  border-color: #badbcc;
+  background: var(--calc-success-bg);
+  color: var(--calc-success-text);
+  border-color: var(--calc-success-border);
 }
 
 .defaults-note {
   font-size: 0.8em;
-  color: #888;
+  color: var(--calc-text-faint);
   margin: 0.3em 0 0;
 }
 
@@ -216,33 +304,35 @@ body {
   font-size: 0.9em;
   padding: 0.3em 0.8em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
 }
 
 .csv-download:hover,
 .csv-upload:hover {
-  background: #e0e0e0;
+  background: var(--calc-btn-hover);
 }
 
 .csv-upload {
   font-size: 0.9em;
   padding: 0.3em 0.8em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
 }
 
 /* localStorage notice */
 .storage-notice {
   font-size: 0.85em;
-  color: #666;
+  color: var(--calc-text-muted);
   margin: 0.5em 0;
   padding: 0.4em 0.7em;
-  background: #f0f7ff;
-  border: 1px solid #d0e3f0;
+  background: var(--calc-card-bg);
+  border: 1px solid var(--calc-card-border);
   border-radius: 4px;
 }
 
@@ -250,7 +340,7 @@ body {
 .save-section {
   margin-top: 1.5em;
   padding-top: 1em;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--calc-border);
 }
 
 .save-section h3 {
@@ -260,7 +350,7 @@ body {
 .save-section label {
   display: block;
   font-size: 0.9em;
-  color: #555;
+  color: var(--calc-text-muted);
   margin-bottom: 0.3em;
 }
 
@@ -274,15 +364,15 @@ body {
   flex: 1;
   font-size: 0.85em;
   padding: 0.4em 0.6em;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f9f9f9;
-  color: #333;
+  background: var(--calc-input-bg);
+  color: var(--calc-text);
   min-width: 0;
 }
 
 .result-link-input:focus {
-  outline: 2px solid #0066cc;
+  outline: 2px solid var(--calc-accent);
   outline-offset: -1px;
 }
 
@@ -290,19 +380,20 @@ body {
   font-size: 0.85em;
   padding: 0.4em 0.8em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
   white-space: nowrap;
 }
 
 .copy-btn:hover {
-  background: #e0e0e0;
+  background: var(--calc-btn-hover);
 }
 
 .save-privacy-note {
   font-size: 0.8em;
-  color: #888;
+  color: var(--calc-text-faint);
   margin: 0.3em 0 0.8em;
 }
 
@@ -312,7 +403,7 @@ body {
 
 .save-option-note {
   font-size: 0.8em;
-  color: #888;
+  color: var(--calc-text-faint);
   margin: 0.3em 0 0;
 }
 
@@ -326,24 +417,25 @@ body {
   font-size: 0.9em;
   padding: 0.3em 0.8em;
   cursor: pointer;
-  border: 1px solid #ccc;
+  border: 1px solid var(--calc-input-border);
   border-radius: 4px;
-  background: #f5f5f5;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
 }
 
 .save-browser-btn:hover {
-  background: #e0e0e0;
+  background: var(--calc-btn-hover);
 }
 
 .save-browser-warning {
-  color: #842029;
+  color: var(--calc-error-text);
 }
 
-/* Embed link */
+/* Embed / attribution link */
 .embed-link {
   margin-top: 2em;
   padding-top: 1em;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--calc-border);
   font-size: 0.85em;
-  color: #888;
+  color: var(--calc-text-faint);
 }
