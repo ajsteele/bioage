@@ -31,12 +31,16 @@ function t(key) {
 
 function parseCSV(text) {
   var lines = text.trim().split('\n');
-  var headers = lines[0].split(',').map(function(h) {
+  // Split respecting quoted fields (commas inside quotes are preserved)
+  function splitCSVLine(line) {
+    return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+  }
+  var headers = splitCSVLine(lines[0]).map(function(h) {
     return h.trim().replace(/^"|"$/g, '');
   });
   var rows = [];
   for (var i = 1; i < lines.length; i++) {
-    var values = lines[i].split(',');
+    var values = splitCSVLine(lines[i]);
     var row = {};
     for (var j = 0; j < headers.length; j++) {
       row[headers[j]] = values[j] ? values[j].trim().replace(/^"|"$/g, '') : '';
@@ -198,7 +202,7 @@ function fromCanonical(value, targetUnit, test_id) {
 
 // --- Transforms ---
 
-function applyTransform(value, transform, canonicalValues, transformFloor) {
+function applyTransform(value, transform, refValues, transformFloor) {
   if (!transform) return value;
 
   if (transform === 'log') {
@@ -211,7 +215,7 @@ function applyTransform(value, transform, canonicalValues, transformFloor) {
 
   if (transform.indexOf('percentage_of:') === 0) {
     var refTestId = transform.split(':')[1];
-    var refValue = canonicalValues[refTestId];
+    var refValue = refValues[refTestId];
     if (refValue && refValue !== 0) {
       return (value / refValue) * 100;
     }

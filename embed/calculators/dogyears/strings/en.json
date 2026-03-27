@@ -1,0 +1,43 @@
+{
+  "title": "Dog age calculator",
+  "intro": "Convert your dog\u2019s age to human-equivalent years using an epigenetic formula based on DNA methylation patterns.",
+
+  "label_years": "Years",
+  "label_months": "Months",
+  "placeholder_years": "e.g. 5",
+  "placeholder_months": "0\u201311",
+
+  "error_enter_age": "Please enter your dog\u2019s age.",
+  "error_minimum_age": "This formula is based on dogs aged 2 months and older.",
+  "error_invalid": "Please enter a valid number.",
+  "error_months_range": "Months must be between 0 and 11.",
+
+  "result_heading": "Your dog is {0} in human-equivalent years",
+  "result_subheading": "(based on epigenetic aging)",
+  "result_traditional": "The traditional formula (7 \u00d7 {0}) would give {1} human years.",
+  "result_difference_higher": "The epigenetic estimate is {0} years higher than the traditional formula.",
+  "result_difference_lower": "The epigenetic estimate is {0} years lower than the traditional formula.",
+  "result_difference_same": "Both formulas give a similar result at this age.",
+
+  "share_heading": "Share your result",
+  "share_photo_label": "Add a photo of your dog",
+  "share_photo_hint": "(optional \u2014 it will appear on the share card)",
+  "share_photo_remove": "Remove photo",
+  "share_download": "Download image",
+  "share_native_title": "My Dog\u2019s Epigenetic Age",
+  "share_native_text": "My dog is {0} in human-equivalent years based on epigenetic aging!",
+
+  "card_title": "My Dog\u2019s Age",
+  "card_human_years": "human equivalent years",
+  "card_epigenetic": "based on epigenetic aging research",
+  "card_cta": "calculate yours at",
+  "card_url": "the-li.org/dogyears",
+  "card_branding": "The Longevity Initiative",
+  "card_aria_label": "Dog age share card: {0} human-equivalent years based on epigenetic aging",
+
+  "about_heading": "About",
+  "about_formula": "This calculator uses the formula <em>human age = 16 \u00d7 ln(dog age) + 31</em>, derived from a study of DNA methylation changes in Labrador retrievers.",
+  "about_limitations": "This is a simplified approximation. Aging rates vary by breed and size\u2014smaller dogs generally live longer than larger breeds. The formula is most accurate for dogs over one year old.",
+  "about_citation": "Based on: Wang T et al. (2020) \u201cQuantitative translation of dog-to-human aging by conserved remodeling of the DNA methylome.\u201d <em>Cell Systems</em> 11(2), 176\u2013185.",
+  "about_citation_url": "https://doi.org/10.1016/j.cels.2020.06.006"
+}

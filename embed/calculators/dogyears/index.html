@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO: credit this content to the parent page, not the iframe URL -->
+  <link rel="canonical" href="https://thelongevityinitiative.org/calculators/dogyears/">
+
+  <!-- Encourage browsers to send Referer header when embedded externally -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <!-- Future-proof light/dark mode support -->
+  <meta name="color-scheme" content="light dark">
+
+  <title>Dog age calculator — The Longevity Initiative</title>
+
+  <link rel="stylesheet" href="../../shared/fonts/inter.css">
+  <link rel="stylesheet" href="../../shared/embed.css">
+  <link rel="stylesheet" href="dogyears.css">
+  <script src="../../shared/vendor/modern-screenshot.js"></script>
+  <script src="dogyears.js"></script>
+</head>
+<body>
+  <h1 id="pageTitle">Dog age calculator</h1>
+
+  <p id="pageIntro">Convert your dog's age to human-equivalent years using an epigenetic formula based on DNA methylation patterns.</p>
+
+  <div id="dogYearsForm" class="bioageform">
+    <noscript>This calculator requires JavaScript to run.</noscript>
+  </div>
+
+  <div id="dogYearsResult" class="bioageform"></div>
+
+  <div id="shareSection" style="display: none;">
+    <h2 id="shareHeading">Share your result</h2>
+    <div id="photoUploadSection">
+      <label for="dogPhotoInput" class="photo-upload-label" id="photoUploadLabel">
+        <span id="photoUploadText">Add a photo of your dog</span>
+        <span class="photo-upload-hint" id="photoUploadHint">(optional — it will appear on the share card)</span>
+      </label>
+      <input type="file" id="dogPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(this)">
+      <div id="photoPreview" style="display:none;">
+        <img id="photoPreviewImg" alt="Your dog's photo">
+        <button type="button" id="photoRemoveBtn" onclick="removePhoto()">Remove photo</button>
+      </div>
+    </div>
+    <div id="shareCardContainer"></div>
+    <a id="shareCardImageLink" style="display:none;" download="my-dogs-age.png"><img id="shareCardImage" alt="" style="max-width:100%; height:auto; border-radius:4px;"></a>
+    <div class="share-buttons">
+      <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
+      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
+    </div>
+    <script>
+      if (navigator.share && navigator.canShare) {
+        document.getElementById('nativeShareBtn').style.display = '';
+      }
+    </script>
+  </div>
+
+  <div id="aboutSection">
+    <h2 id="aboutHeading">About</h2>
+    <p id="aboutFormula"></p>
+    <p id="aboutLimitations"></p>
+    <p id="aboutCitation"></p>
+  </div>
+
+  <p class="embed-link">Find out more at <a href="https://thelongevityinitiative.org/calculators/dogyears/">The Longevity Initiative</a>.</p>
+
+  <!-- Embed support: theme, height resize, config -->
+  <script>
+    (function() {
+      // Read embed config from URL params
+      window.embedConfig = Object.fromEntries
+        ? Object.fromEntries(new URLSearchParams(window.location.search))
+        : {};
+
+      // Apply theme: default is light (LI brand), ?theme=dark or ?theme=auto
+      var theme = window.embedConfig.theme || 'light';
+      if (theme === 'dark' || theme === 'auto') {
+        document.documentElement.classList.add('theme-' + theme);
+      }
+      // Update color-scheme meta for native form controls
+      var colorScheme = document.querySelector('meta[name="color-scheme"]');
+      if (colorScheme) {
+        if (theme === 'dark') colorScheme.content = 'dark';
+        else if (theme === 'auto') colorScheme.content = 'light dark';
+        else colorScheme.content = 'light';
+      }
+
+      // Hide embed link on own site (when ?source=li)
+      if (window.embedConfig.source === 'li') {
+        document.addEventListener('DOMContentLoaded', function() {
+          var link = document.querySelector('.embed-link');
+          if (link) link.style.display = 'none';
+        });
+      }
+
+      // Notify parent iframe of height changes
+      function notifyParentOfHeight() {
+        window.parent.postMessage(
+          { type: 'li-calculator-resize', height: document.documentElement.scrollHeight },
+          '*'
+        );
+      }
+      if (window.ResizeObserver) {
+        new ResizeObserver(notifyParentOfHeight).observe(document.documentElement);
+      }
+      window.addEventListener('resize', notifyParentOfHeight);
+      document.addEventListener('DOMContentLoaded', notifyParentOfHeight);
+    })();
+  </script>
+</body>
+</html>
