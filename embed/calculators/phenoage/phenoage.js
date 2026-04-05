@@ -374,6 +374,7 @@ function calculateResult() {
   console.log('### Calculating! ###');
   var resultField = document.getElementById('phenoAgeResult');
   var shareSection = document.getElementById('shareSection');
+  var saveSection = document.getElementById('saveSection');
   clearInputErrors();
   var errors = [];
 
@@ -437,6 +438,7 @@ function calculateResult() {
   if (errors.length > 0) {
     resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
@@ -473,6 +475,7 @@ function calculateResult() {
       resultField.innerHTML = '';
     }
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
@@ -498,6 +501,7 @@ function calculateResult() {
   if (errors.length > 0) {
     resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
@@ -505,12 +509,14 @@ function calculateResult() {
   if (age < 0 || age > 150) {
     resultField.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
   if (!allFilled) {
     resultField.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
@@ -583,6 +589,7 @@ function calculateResult() {
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
     resultField.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
+    if (saveSection) saveSection.style.display = 'none';
     return;
   }
 
@@ -636,9 +643,10 @@ function calculateResult() {
       warningText + '</div>';
   }
 
-  // 4. Save your result — separate section
+  // 4. Save your result — in its own div below the share card
+  if (saveSection) saveSection.style.display = '';
   var resultLink = createAnchorFromValues(dobVal, testdateVal, formTests, rawValues, selectedUnits);
-  resultField.innerHTML += '<div class="save-section">' +
+  saveSection.innerHTML = '<div class="save-section">' +
     '<h3>' + t('save_section_heading') + '</h3>' +
     '<label for="resultLink">' + t('save_link_label') + '</label>' +
     '<div class="save-link-row">' +
