@@ -1292,7 +1292,11 @@ function normaliseDate(str) {
     if (a > 12) return pad(c) + '-' + pad(b) + '-' + pad(a);
     // If second part > 12 it must be the day (MM/DD/YYYY)
     if (b > 12) return pad(c) + '-' + pad(a) + '-' + pad(b);
-    // Ambiguous (e.g. 01/02/2000) — assume DD/MM/YYYY (non-US convention)
+    // Ambiguous (e.g. 01/02/2000) — use browser locale to decide
+    // US-style locales put month first; almost everyone else puts day first
+    var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+    var monthFirst = lang === 'en-us' || lang === 'en-ph' || lang === 'en-bz';
+    if (monthFirst) return pad(c) + '-' + pad(a) + '-' + pad(b);
     return pad(c) + '-' + pad(b) + '-' + pad(a);
   }
   return str;
