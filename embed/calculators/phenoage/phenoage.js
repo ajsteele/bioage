@@ -383,9 +383,10 @@ function showRangeAlert(elementId, level, message) {
 
 function calculateResult() {
   console.log('### Calculating! ###');
-  var resultField = document.getElementById('phenoAgeResult');
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
+  var warningsDiv = document.getElementById('resultWarnings');
+  var summaryEl = document.getElementById('resultSummary');
   clearInputErrors();
   var errors = [];
 
@@ -447,9 +448,10 @@ function calculateResult() {
   }
 
   if (errors.length > 0) {
-    resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
@@ -481,12 +483,13 @@ function calculateResult() {
       }
     }
     if (!allFilled) {
-      resultField.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
+      warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
     } else {
-      resultField.innerHTML = '';
+      warningsDiv.innerHTML = '';
     }
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
@@ -510,24 +513,27 @@ function calculateResult() {
   }
 
   if (errors.length > 0) {
-    resultField.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    resultField.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
+    warningsDiv.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
   if (!allFilled) {
-    resultField.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
+    warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
@@ -598,9 +604,10 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    resultField.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
+    warningsDiv.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
+    if (summaryEl) summaryEl.textContent = '';
     return;
   }
 
@@ -608,7 +615,7 @@ function calculateResult() {
   generateShareCard(phenoAge, age, acceleration);
 
   // 2. Warnings (defaults, implausible values)
-  resultField.innerHTML = '';
+  warningsDiv.innerHTML = '';
 
   // Note if any values are population defaults — graduated warning
   var defaultCount = 0;
@@ -631,7 +638,7 @@ function calculateResult() {
       warningKey = 'defaults_warning_few';
     }
     var level = (defaultCount >= Math.ceil(totalTests / 3)) ? 'error' : 'warning';
-    resultField.innerHTML += '<div class="result-warning' +
+    warningsDiv.innerHTML += '<div class="result-warning' +
       (level === 'error' ? ' result-warning-severe' : '') + '">' +
       t(warningKey, defaultCount, totalTests) + '</div>';
   }
@@ -641,15 +648,14 @@ function calculateResult() {
     var warningText = implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
       : t('result_implausible_warning_many', implausibleNames.join(', '));
-    resultField.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
+    warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
       warningText + '</div>';
   }
 
-  // 3. Descriptive summary text
+  // 3. Descriptive summary text (below the share buttons)
   var riskPct = formatSigFigs(riskOfDeath * 100, 2);
   var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
-  resultField.innerHTML += '<p class="result-summary">' +
-    t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN) + '</p>';
+  summaryEl.textContent = t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN);
 
   // 4. Save your result — in its own div below the share card
   if (saveSection) saveSection.style.display = '';
@@ -697,11 +703,7 @@ function generateShareCard(bioAge, chronAge, acceleration) {
 
   shareSection.style.display = 'block';
 
-  // Update share section text from strings
-  var shareHeading = document.getElementById('shareHeading');
-  if (shareHeading) shareHeading.textContent = t('share_heading');
-  var shareNote = document.getElementById('shareNote');
-  if (shareNote) shareNote.textContent = t('share_image_note');
+  // Update button text from strings
   var downloadBtn = document.getElementById('downloadImageBtn');
   if (downloadBtn) downloadBtn.textContent = t('share_download_image');
 

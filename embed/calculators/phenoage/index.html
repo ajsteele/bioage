@@ -24,20 +24,20 @@
   <div id="phenoAgeForm" class="bioageform">
     <code>This form requires JavaScript to run. Please open in a browser with it enabled. It doesn’t store your data or do anything intrusive so don’t worry if you disable JavaScript for privacy reasons. :)</code>
   </div>
-  <div id="phenoAgeResult" class="bioageform"></div>
+
+  <div id="resultWarnings"></div>
 
   <div id="shareSection" style="display: none;">
-    <h2 id="shareHeading">Share your result</h2>
-    <p id="shareNote">This image only shows your biological age result, not your blood test values.</p>
     <div id="shareCardContainer"></div>
     <a id="shareCardImageLink" style="display:none;" download="my-biological-age.png"><img id="shareCardImage" alt="" style="max-width:100%; height:auto; border-radius:4px;"></a>
     <div class="share-buttons">
       <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
       <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
     </div>
+    <p id="resultSummary" class="result-summary"></p>
     <script>
       if (navigator.share && navigator.canShare) {
-        document.getElementById('nativeShareBtn').style.display = '';
+        document.getElementById(‘nativeShareBtn’).style.display = ‘’;
       }
     </script>
   </div>
