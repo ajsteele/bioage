@@ -201,6 +201,7 @@
         '  title="' + calc.name + ' — The Longevity Initiative"\n' +
         '  loading="lazy"\n' +
         '></iframe>\n' +
+        '<a href="https://thelongevityinitiative.org/calculators/' + calc.path + '/" style="font-size: 0.75em">' + calc.name +' calculator by The Longevity Initiative</a>' +
         '<script>\n' +
         '  window.addEventListener(\'message\', function(e) {\n' +
         '    if (\n' +
@@ -215,7 +216,7 @@
         '    }\n' +
         '  });\n' +
         '<\/script>\n' +
-        '<!-- Calculator by The Longevity Initiative: https://thelongevityinitiative.org -->';
+        '<!-- / end of ' + calc.name + ' calculator code -->';
     }
 
     function updateEmbed() {
