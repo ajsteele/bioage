@@ -653,9 +653,6 @@ function calculateResult() {
       '<div class="save-buttons">' +
         '<button type="button" onclick="downloadCSV()" class="csv-download">' +
           t('save_download_csv') + '</button>' +
-        '<button type="button" onclick="uploadCSV()" class="csv-upload">' +
-          t('save_upload_csv') + '</button>' +
-        '<input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVUpload(this)">' +
       '</div>' +
       '<p class="save-option-note">' + t('save_csv_note') + '</p>' +
     '</div>' +
@@ -998,6 +995,24 @@ function createFormElements() {
   testdateRow.appendChild(testdateInput);
   dateSection.appendChild(testdateRow);
 
+  // CSV upload — available at the top so users can load data before entering values
+  var csvRow = document.createElement('div');
+  csvRow.className = 'date-row csv-load-row';
+  var csvBtn = document.createElement('button');
+  csvBtn.setAttribute('type', 'button');
+  csvBtn.className = 'csv-upload';
+  csvBtn.textContent = t('save_upload_csv');
+  csvBtn.onclick = uploadCSV;
+  csvRow.appendChild(csvBtn);
+  var csvFileInput = document.createElement('input');
+  csvFileInput.setAttribute('type', 'file');
+  csvFileInput.setAttribute('id', 'csvFileInput');
+  csvFileInput.setAttribute('accept', '.csv');
+  csvFileInput.style.display = 'none';
+  csvFileInput.setAttribute('onchange', 'handleCSVUpload(this)');
+  csvRow.appendChild(csvFileInput);
+  dateSection.appendChild(csvRow);
+
   formDiv.appendChild(dateSection);
 
   // DOB prompt — shown when date of birth is not yet entered
@@ -1237,7 +1252,7 @@ function downloadCSV() {
     }
   }
 
-  var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  var blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   var link = document.createElement('a');
   link.download = 'phenoage-' + (testdateVal || 'results') + '.csv';
   link.href = URL.createObjectURL(blob);

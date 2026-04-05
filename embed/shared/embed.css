@@ -144,6 +144,10 @@ a {
   margin-bottom: 1em;
 }
 
+.csv-load-row {
+  margin-top: 0.3em;
+}
+
 .date-row {
   margin-bottom: 0.5em;
 }
