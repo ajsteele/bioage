@@ -1293,16 +1293,18 @@ function handleCSVUpload(fileInput) {
       if (!line || line.charAt(0) === '#' || line.indexOf('field,') === 0) continue;
 
       var parts = line.split(',');
-      var field = parts[0];
-      var value = parts[1];
-      var unit = parts[2];
+      var field = (parts[0] || '').trim();
+      var value = (parts[1] || '').trim();
+      var unit = (parts[2] || '').trim();
+
+      if (!field || !value) continue;
 
       if (field === 'dob') {
         var dobInput = document.getElementById('dob');
-        if (dobInput && value) { dobInput.value = value; loaded++; }
+        if (dobInput) { dobInput.value = value; loaded++; }
       } else if (field === 'test_date') {
         var tdInput = document.getElementById('testdate');
-        if (tdInput && value) { tdInput.value = value; loaded++; }
+        if (tdInput) { tdInput.value = value; loaded++; }
       } else {
         // Biomarker value — strip " (population default)" suffix if present
         var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
