@@ -1265,6 +1265,17 @@ function uploadCSV() {
   if (input) input.click();
 }
 
+function showCSVMessage(text, isError) {
+  var row = document.querySelector('.csv-load-row');
+  if (!row) return;
+  var existing = row.querySelector('.csv-message');
+  if (existing) existing.remove();
+  var msg = document.createElement('span');
+  msg.className = 'csv-message' + (isError ? ' csv-message-error' : '');
+  msg.textContent = text;
+  row.appendChild(msg);
+}
+
 function handleCSVUpload(fileInput) {
   var file = fileInput.files[0];
   if (!file) return;
@@ -1272,7 +1283,10 @@ function handleCSVUpload(fileInput) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var text = e.target.result;
+    // Strip UTF-8 BOM if present
+    if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
     var lines = text.trim().split('\n');
+    var loaded = 0;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
@@ -1285,17 +1299,18 @@ function handleCSVUpload(fileInput) {
 
       if (field === 'dob') {
         var dobInput = document.getElementById('dob');
-        if (dobInput && value) dobInput.value = value;
+        if (dobInput && value) { dobInput.value = value; loaded++; }
       } else if (field === 'test_date') {
         var tdInput = document.getElementById('testdate');
-        if (tdInput && value) tdInput.value = value;
+        if (tdInput && value) { tdInput.value = value; loaded++; }
       } else {
         // Biomarker value — strip " (population default)" suffix if present
-        var cleanValue = value.replace(/\s*\(population default\)/, '');
+        var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
         var input = document.getElementById(field);
         if (input && cleanValue) {
           input.value = cleanValue;
           input.classList.remove('default-value');
+          loaded++;
           // Set the matching unit if available
           if (unit) {
             var unitSelect = document.getElementById(field + 'Unit');
@@ -1312,9 +1327,15 @@ function handleCSVUpload(fileInput) {
       }
     }
 
-    updateDobPrompt();
-    updateDefaultsButton();
-    calculateResult();
+    if (loaded > 0) {
+      showCSVMessage(t('save_upload_success', loaded,
+        loaded > 1 ? t('save_upload_success_plural') : t('save_upload_success_singular')), false);
+      updateDobPrompt();
+      updateDefaultsButton();
+      calculateResult();
+    } else {
+      showCSVMessage(t('save_upload_no_data'), true);
+    }
   };
   reader.readAsText(file);
 

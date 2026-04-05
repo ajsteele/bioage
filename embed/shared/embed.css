@@ -146,6 +146,18 @@ a {
 
 .csv-load-row {
   margin-top: 0.3em;
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+}
+
+.csv-message {
+  font-size: 0.85em;
+  color: var(--calc-success-text);
+}
+
+.csv-message-error {
+  color: var(--calc-error-text);
 }
 
 .date-row {
