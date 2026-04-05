@@ -1265,6 +1265,43 @@ function uploadCSV() {
   if (input) input.click();
 }
 
+// Normalise a date string to YYYY-MM-DD for <input type="date">.
+// Accepts: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, DD.MM.YYYY
+function normaliseDate(str) {
+  str = str.trim();
+  // Already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+  var parts;
+  if (str.indexOf('/') !== -1) parts = str.split('/');
+  else if (str.indexOf('.') !== -1) parts = str.split('.');
+  else if (str.indexOf('-') !== -1) parts = str.split('-');
+  else return str;
+
+  if (parts.length !== 3) return str;
+
+  var a = parseInt(parts[0], 10);
+  var b = parseInt(parts[1], 10);
+  var c = parseInt(parts[2], 10);
+
+  // If first part is a 4-digit year: YYYY/MM/DD
+  if (a > 99) return pad(a) + '-' + pad(b) + '-' + pad(c);
+  // If last part is a 4-digit year: DD/MM/YYYY or MM/DD/YYYY
+  if (c > 99) {
+    // If first part > 12 it must be the day (DD/MM/YYYY)
+    if (a > 12) return pad(c) + '-' + pad(b) + '-' + pad(a);
+    // If second part > 12 it must be the day (MM/DD/YYYY)
+    if (b > 12) return pad(c) + '-' + pad(a) + '-' + pad(b);
+    // Ambiguous (e.g. 01/02/2000) — assume DD/MM/YYYY (non-US convention)
+    return pad(c) + '-' + pad(b) + '-' + pad(a);
+  }
+  return str;
+}
+
+function pad(n) {
+  return n < 10 ? '0' + n : '' + n;
+}
+
 function showCSVMessage(text, isError) {
   var row = document.querySelector('.csv-load-row');
   if (!row) return;
@@ -1299,12 +1336,12 @@ function handleCSVUpload(fileInput) {
 
       if (!field || !value) continue;
 
-      if (field === 'dob') {
-        var dobInput = document.getElementById('dob');
-        if (dobInput) { dobInput.value = value; loaded++; }
-      } else if (field === 'test_date') {
-        var tdInput = document.getElementById('testdate');
-        if (tdInput) { tdInput.value = value; loaded++; }
+      if (field === 'dob' || field === 'test_date') {
+        var dateInput = document.getElementById(field === 'dob' ? 'dob' : 'testdate');
+        if (dateInput) {
+          dateInput.value = normaliseDate(value);
+          if (dateInput.value) loaded++;
+        }
       } else {
         // Biomarker value — strip " (population default)" suffix if present
         var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
