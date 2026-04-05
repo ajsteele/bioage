@@ -131,6 +131,12 @@ a {
   color: var(--calc-accent);
 }
 
+.result-summary {
+  font-size: 0.95em;
+  color: var(--calc-text-muted);
+  line-height: 1.6;
+}
+
 .bioageform select:disabled {
     appearance: none;
     border: none;

@@ -349,6 +349,17 @@ function formatRangeInUnit(canonicalValue, unitIndex, formTest) {
   return displayVal.toFixed(0);
 }
 
+// Format a number to n significant figures, returning a clean string.
+// e.g. formatSigFigs(0.1234, 2) => "0.12", formatSigFigs(10.456, 2) => "10"
+function formatSigFigs(value, n) {
+  if (value === 0) return '0';
+  var raw = parseFloat(value.toPrecision(n));
+  // Determine decimal places needed to show n sig figs
+  var magnitude = Math.floor(Math.log10(Math.abs(value)));
+  var decimals = Math.max(0, n - 1 - magnitude);
+  return raw.toFixed(decimals);
+}
+
 function showRangeAlert(elementId, level, message) {
   var el = document.getElementById(elementId);
   if (!el) return;
@@ -593,20 +604,11 @@ function calculateResult() {
     return;
   }
 
-  var accelStr = (acceleration >= 0 ? '+' : '') + acceleration.toFixed(2);
-
-  // 1. Main result line
-  resultField.innerHTML = '<p class="result"><strong>' + t('result_heading') + '</strong> ' +
-    t('result_detail', phenoAge.toFixed(2), accelStr) + '</p>';
-
-  // 2. Share card (image + sharing buttons) — shown first below the result
+  // 1. Share card (the primary visual result)
   generateShareCard(phenoAge, age, acceleration);
 
-  // 3. Additional details
-  resultField.innerHTML += '<p>' + t('result_chronological_age', age.toFixed(1)) + '</p>';
-  resultField.innerHTML += '<p>' + t('result_risk_of_death',
-    (riskOfDeath * 100).toFixed(2),
-    parseFloat((1 / riskOfDeath).toPrecision(2))) + '</p>';
+  // 2. Warnings (defaults, implausible values)
+  resultField.innerHTML = '';
 
   // Note if any values are population defaults — graduated warning
   var defaultCount = 0;
@@ -642,6 +644,12 @@ function calculateResult() {
     resultField.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
       warningText + '</div>';
   }
+
+  // 3. Descriptive summary text
+  var riskPct = formatSigFigs(riskOfDeath * 100, 2);
+  var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3)));
+  resultField.innerHTML += '<p class="result-summary">' +
+    t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN) + '</p>';
 
   // 4. Save your result — in its own div below the share card
   if (saveSection) saveSection.style.display = '';
