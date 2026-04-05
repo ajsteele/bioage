@@ -647,7 +647,7 @@ function calculateResult() {
 
   // 3. Descriptive summary text
   var riskPct = formatSigFigs(riskOfDeath * 100, 2);
-  var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3)));
+  var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
   resultField.innerHTML += '<p class="result-summary">' +
     t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN) + '</p>';
 
