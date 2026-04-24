@@ -1,0 +1,315 @@
+/* Jet lag clock — page-specific styles
+   Uses CSS custom properties from ../../shared/embed.css */
+
+/* ── Controls panel ───────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  margin-bottom: 1.5em;
+  padding: 1.25em;
+  background: var(--calc-card-bg);
+  border: 1px solid var(--calc-card-border);
+  border-radius: 6px;
+}
+
+.q-label {
+  font-size: 0.92em;
+  font-weight: 500;
+  color: var(--calc-text);
+  margin-bottom: 0.4em;
+  line-height: 1.4;
+}
+
+.controls label {
+  display: block;
+  font-size: 0.78em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--calc-text-faint);
+  margin-bottom: 0.25em;
+}
+
+.controls input,
+.controls select {
+  font-family: inherit;
+  font-size: 0.95em;
+  padding: 0.45em 0.65em;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.controls input:focus {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: -1px;
+}
+
+.controls input[type="time"] {
+  max-width: 160px;
+}
+
+/* ── Route row (from / swap / to) ─────────────────────────────────────── */
+.route-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.route-row .field {
+  flex: 1;
+}
+
+.swap-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: var(--calc-btn-bg);
+  border: 1px solid var(--calc-input-border);
+  color: var(--calc-text-faint);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 0;
+  transition: all 0.15s;
+}
+
+.swap-btn:hover {
+  color: var(--calc-text);
+  border-color: var(--calc-accent);
+  background: var(--calc-btn-hover);
+}
+
+/* ── Date row ─────────────────────────────────────────────────────────── */
+.travel-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 400px) {
+  .travel-date-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Timezone shift slider ────────────────────────────────────────────── */
+.shift-wrap {
+  border-top: 1px solid var(--calc-border);
+  padding-top: 0.9em;
+}
+
+.shift-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5em;
+}
+
+.shift-header span {
+  font-size: 0.78em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--calc-text-faint);
+}
+
+.shift-val {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--calc-text);
+}
+
+input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 3px;
+  border: none;
+  padding: 0;
+  outline: none;
+  background: var(--calc-btn-bg);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--calc-input-bg);
+  border: 2px solid var(--calc-accent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--calc-input-bg);
+  border: 2px solid var(--calc-accent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72em;
+  color: var(--calc-text-faint);
+  margin-top: 0.25em;
+}
+
+/* ── Status message ───────────────────────────────────────────────────── */
+.status-msg {
+  padding: 0.7em 0.9em;
+  border-radius: 6px;
+  font-size: 0.9em;
+  line-height: 1.6;
+  border-left: 3px solid;
+  margin-bottom: 1.5em;
+}
+
+.status-msg strong {
+  font-weight: 600;
+}
+
+.status-advance {
+  background: var(--calc-info-bg);
+  border-color: var(--calc-accent);
+  color: var(--calc-info-text);
+}
+
+.status-delay {
+  background: var(--calc-error-bg);
+  border-color: var(--calc-error-text);
+  color: var(--calc-error-text);
+}
+
+.status-adapted {
+  background: var(--calc-success-bg);
+  border-color: var(--calc-success-text);
+  color: var(--calc-success-text);
+}
+
+.status-same {
+  background: var(--calc-card-bg);
+  border-color: var(--calc-border);
+  color: var(--calc-text-muted);
+}
+
+.status-toggle {
+  font-size: 0.85em;
+  color: var(--calc-text-faint);
+  line-height: 1.6;
+  display: inline-block;
+  margin-top: 0.4em;
+}
+
+.status-toggle a {
+  color: var(--calc-accent);
+}
+
+/* ── Results layout ───────────────────────────────────────────────────── */
+.results {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.clock-col {
+  flex-shrink: 0;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+svg#clock {
+  display: block;
+  max-width: 100%;
+}
+
+.info-col {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .results {
+    flex-direction: column;
+    align-items: center;
+  }
+  .clock-col {
+    width: 260px;
+  }
+  .info-col {
+    width: 100%;
+  }
+  .route-row {
+    flex-wrap: wrap;
+  }
+  .route-row .field {
+    min-width: calc(50% - 26px);
+  }
+}
+
+/* ── Legend ────────────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.leg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78em;
+  color: var(--calc-text-faint);
+}
+
+.swatch {
+  width: 18px;
+  height: 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Instruction rows ─────────────────────────────────────────────────── */
+.instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.irow {
+  border-left: 3px solid;
+  border-radius: 6px;
+  padding: 0.5em 0.75em;
+  font-size: 0.88em;
+  line-height: 1.6;
+  background: var(--calc-card-bg);
+}
+
+.irow strong {
+  display: block;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.1em;
+  font-weight: 600;
+}
+
+/* ── Clock arc colours (used as inline styles from JS, defined here for reference) ── */
+/* Seek: var(--calc-accent) / rgba version for arcs
+   Avoid: #d4891a (amber) / rgba version for arcs
+   Sleep: dark bg with subtle border
+   CBT marker: #e03030
+   Melatonin: #9060d0
+   Caffeine: #8a6010  */
