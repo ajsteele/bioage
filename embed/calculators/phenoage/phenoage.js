@@ -67,10 +67,7 @@ function loadConfig() {
     // Parse tests
     testDefs = parseCSV(testsCSV);
 
-    // Parse conversions into a lookup: {test_id: [{unit, to_canonical_factor, transform}]}
-    // The optional `transform` column allows units that depend on another test
-    // (e.g. lymphocytes given as an absolute count, which only converts to a
-    // percentage given the WBC count).
+    // Parse conversions into a lookup: {test_id: [{unit, to_canonical_factor}]}
     conversions = {};
     var convRows = parseCSV(conversionsCSV);
     for (var i = 0; i < convRows.length; i++) {
@@ -80,8 +77,7 @@ function loadConfig() {
       }
       conversions[row.test_id].push({
         unit: row.unit,
-        to_canonical_factor: parseFloat(row.to_canonical_factor),
-        transform: row.transform || ''
+        to_canonical_factor: parseFloat(row.to_canonical_factor)
       });
     }
 
@@ -179,54 +175,72 @@ function getDefaultForAge(age, test_id) {
 
 // --- Unit conversion engine ---
 
-// Convert a raw user-entered value to its canonical unit.
-//   context (optional): a {test_id: canonicalValue} map providing reference
-//   values for transforms like `percentage_of:X`. Returns null when a needed
-//   reference value is missing or non-positive.
-function toCanonical(value, unit, test_id, context) {
-  var testConvs = conversions[test_id];
-  if (!testConvs) return value;
-  for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit !== unit) continue;
-    var factor = testConvs[i].to_canonical_factor;
-    var transform = testConvs[i].transform;
-    if (!transform) return value * factor;
-    if (transform.indexOf('percentage_of:') === 0) {
-      // value*factor is a count in the same scale as the reference's canonical
-      // (e.g. for lymphocyte: 10⁹ cells/L, matching wbc canonical).
-      var refId = transform.substring('percentage_of:'.length);
-      var refVal = context && context[refId];
-      if (refVal == null || refVal <= 0) return null;
-      return (value * factor) / refVal * 100;
-    }
-    console.warn('Unknown unit transform: ' + transform);
-    return value * factor;
+function findModelBiomarker(test_id) {
+  if (!model || !model.biomarkers) return null;
+  for (var i = 0; i < model.biomarkers.length; i++) {
+    if (model.biomarkers[i].test_id === test_id) return model.biomarkers[i];
   }
-  console.warn('No conversion found for ' + test_id + ' unit ' + unit);
-  return value;
+  return null;
+}
+
+function getConversionFactor(test_id, unit) {
+  var testConvs = conversions[test_id];
+  if (!testConvs) return null;
+  for (var i = 0; i < testConvs.length; i++) {
+    if (testConvs[i].unit === unit) return testConvs[i].to_canonical_factor;
+  }
+  return null;
+}
+
+// Convert a user-entered value to its canonical unit.
+//
+// For most tests this is a simple `value * factor`. The interesting case is
+// lymphocytes, which the model wants as a percentage of WBC: when the user
+// has selected an absolute-count unit instead, we still need to produce a
+// percentage. That cross-test conversion is described once, on the model
+// biomarker, as `transform: percentage_of:wbc`. We apply it here whenever the
+// user's selected unit doesn't already match the model's canonical unit.
+//
+// `context` (optional) is a {test_id: canonicalValue} map providing reference
+// values for percentage_of transforms; returns null when a needed reference is
+// missing or non-positive.
+function toCanonical(value, unit, test_id, context) {
+  var factor = getConversionFactor(test_id, unit);
+  if (factor === null) {
+    console.warn('No conversion found for ' + test_id + ' unit ' + unit);
+    return value;
+  }
+  var raw = value * factor;
+
+  var bm = findModelBiomarker(test_id);
+  if (bm && bm.transform && bm.transform.indexOf('percentage_of:') === 0 && unit !== bm.unit) {
+    // raw is now a count in the same scale as the reference's canonical.
+    var refId = bm.transform.substring('percentage_of:'.length);
+    var refVal = context && context[refId];
+    if (refVal == null || refVal <= 0) return null;
+    return raw / refVal * 100;
+  }
+  return raw;
 }
 
 // Inverse of toCanonical: render a canonical value in `targetUnit`. Same
 // context contract — returns null if a needed reference is unavailable.
 function fromCanonical(value, targetUnit, test_id, context) {
-  var testConvs = conversions[test_id];
-  if (!testConvs) return value;
-  for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit !== targetUnit) continue;
-    var factor = testConvs[i].to_canonical_factor;
-    var transform = testConvs[i].transform;
-    if (!transform) return value / factor;
-    if (transform.indexOf('percentage_of:') === 0) {
-      var refId = transform.substring('percentage_of:'.length);
-      var refVal = context && context[refId];
-      if (refVal == null || refVal <= 0) return null;
-      // canonical value is a percentage of refVal; convert back to absolute count.
-      return (value / 100 * refVal) / factor;
-    }
-    return value / factor;
+  var factor = getConversionFactor(test_id, targetUnit);
+  if (factor === null) {
+    console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
+    return value;
   }
-  console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
-  return value;
+
+  var bm = findModelBiomarker(test_id);
+  if (bm && bm.transform && bm.transform.indexOf('percentage_of:') === 0 && targetUnit !== bm.unit) {
+    // canonical value is a percentage; convert back to an absolute count.
+    var refId = bm.transform.substring('percentage_of:'.length);
+    var refVal = context && context[refId];
+    if (refVal == null || refVal <= 0) return null;
+    return (value / 100 * refVal) / factor;
+  }
+  return value / factor;
 }
 
 // --- Transforms ---
