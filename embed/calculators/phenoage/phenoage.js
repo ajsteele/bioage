@@ -1421,7 +1421,7 @@ function saveToLocalStorage() {
       data.tests.push({
         id: formTests[i].id,
         value: input.value,
-        unit: unitSelect.options[unitSelect.selectedIndex].text,
+        units: unitSelect.options[unitSelect.selectedIndex].text,
         isDefault: input.classList.contains('default-value')
       });
     }
