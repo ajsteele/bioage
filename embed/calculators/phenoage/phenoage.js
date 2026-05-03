@@ -27,14 +27,34 @@ function t(key) {
   return s;
 }
 
+// Test names are stored sentence-case (e.g. "albumin") so they read naturally
+// mid-sentence in joined lists. Use this when one starts a sentence or labels
+// a field.
+function capitalizeFirst(s) {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Join a list with commas and a final conjunction, e.g.
+// ['a','b','c'] -> "a, b, and c". For two items: "a and b". For one: "a".
+function joinAndList(items) {
+  if (!items || items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  var conj = t('list_and');
+  if (items.length === 2) return items[0] + ' ' + conj + ' ' + items[1];
+  return items.slice(0, -1).join(', ') + ', ' + conj + ' ' + items[items.length - 1];
+}
+
 // --- Config loading ---
+
+// Split a single CSV line, respecting quoted fields (commas inside quotes are
+// preserved as part of the field).
+function splitCSVLine(line) {
+  return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+}
 
 function parseCSV(text) {
   var lines = text.trim().split('\n');
-  // Split respecting quoted fields (commas inside quotes are preserved)
-  function splitCSVLine(line) {
-    return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-  }
   var headers = splitCSVLine(lines[0]).map(function(h) {
     return h.trim().replace(/^"|"$/g, '');
   });
@@ -108,11 +128,9 @@ function buildFormTests() {
     var testConversions = conversions[bm.test_id];
 
     var units = [];
-    var factors = [];
     if (testConversions) {
       for (var j = 0; j < testConversions.length; j++) {
         units.push(testConversions[j].unit);
-        factors.push(testConversions[j].to_canonical_factor);
       }
     }
 
@@ -120,7 +138,6 @@ function buildFormTests() {
       id: bm.test_id,
       name: testDef ? testDef.name : bm.test_id,
       units: units,
-      to_canonical_factors: factors,
       normal_low: testDef && testDef.normal_low !== '' ? parseFloat(testDef.normal_low) : null,
       normal_high: testDef && testDef.normal_high !== '' ? parseFloat(testDef.normal_high) : null,
       plausible_low: testDef && testDef.plausible_low !== '' ? parseFloat(testDef.plausible_low) : null,
@@ -176,28 +193,72 @@ function getDefaultForAge(age, test_id) {
 
 // --- Unit conversion engine ---
 
-function toCanonical(value, unit, test_id) {
-  var testConvs = conversions[test_id];
-  if (!testConvs) return value;
-  for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit === unit) {
-      return value * testConvs[i].to_canonical_factor;
-    }
+function findModelBiomarker(test_id) {
+  if (!model || !model.biomarkers) return null;
+  for (var i = 0; i < model.biomarkers.length; i++) {
+    if (model.biomarkers[i].test_id === test_id) return model.biomarkers[i];
   }
-  console.warn('No conversion found for ' + test_id + ' unit ' + unit);
-  return value;
+  return null;
 }
 
-function fromCanonical(value, targetUnit, test_id) {
+function getConversionFactor(test_id, unit) {
   var testConvs = conversions[test_id];
-  if (!testConvs) return value;
+  if (!testConvs) return null;
   for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit === targetUnit) {
-      return value / testConvs[i].to_canonical_factor;
-    }
+    if (testConvs[i].unit === unit) return testConvs[i].to_canonical_factor;
   }
-  console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
-  return value;
+  return null;
+}
+
+// Convert a user-entered value to its canonical unit.
+//
+// For most tests this is a simple `value * factor`. The interesting case is
+// lymphocytes, which the model wants as a percentage of WBC: when the user
+// has selected an absolute-count unit instead, we still need to produce a
+// percentage. That cross-test conversion is described once, on the model
+// biomarker, as `transform: percentage_of:wbc`. We apply it here whenever the
+// user's selected unit doesn't already match the model's canonical unit.
+//
+// `context` (optional) is a {test_id: canonicalValue} map providing reference
+// values for percentage_of transforms; returns null when a needed reference is
+// missing or non-positive.
+function toCanonical(value, unit, test_id, context) {
+  var factor = getConversionFactor(test_id, unit);
+  if (factor === null) {
+    console.warn('No conversion found for ' + test_id + ' unit ' + unit);
+    return value;
+  }
+  var raw = value * factor;
+
+  var bm = findModelBiomarker(test_id);
+  if (bm && bm.transform && bm.transform.indexOf('percentage_of:') === 0 && unit !== bm.unit) {
+    // raw is now a count in the same scale as the reference's canonical.
+    var refId = bm.transform.substring('percentage_of:'.length);
+    var refVal = context && context[refId];
+    if (refVal == null || refVal <= 0) return null;
+    return raw / refVal * 100;
+  }
+  return raw;
+}
+
+// Inverse of toCanonical: render a canonical value in `targetUnit`. Same
+// context contract — returns null if a needed reference is unavailable.
+function fromCanonical(value, targetUnit, test_id, context) {
+  var factor = getConversionFactor(test_id, targetUnit);
+  if (factor === null) {
+    console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
+    return value;
+  }
+
+  var bm = findModelBiomarker(test_id);
+  if (bm && bm.transform && bm.transform.indexOf('percentage_of:') === 0 && targetUnit !== bm.unit) {
+    // canonical value is a percentage; convert back to an absolute count.
+    var refId = bm.transform.substring('percentage_of:'.length);
+    var refVal = context && context[refId];
+    if (refVal == null || refVal <= 0) return null;
+    return (value / 100 * refVal) / factor;
+  }
+  return value / factor;
 }
 
 // --- Transforms ---
@@ -213,15 +274,9 @@ function applyTransform(value, transform, refValues, transformFloor) {
     return Math.log(value);
   }
 
-  if (transform.indexOf('percentage_of:') === 0) {
-    var refTestId = transform.split(':')[1];
-    var refValue = refValues[refTestId];
-    if (refValue && refValue !== 0) {
-      return (value / refValue) * 100;
-    }
-    return value;
-  }
-
+  // Cross-test transforms like `percentage_of:wbc` are now handled at the
+  // unit-conversion layer (toCanonical/fromCanonical), so they shouldn't
+  // appear here. Warn if one slips through.
   console.warn('Unknown transform: ' + transform);
   return value;
 }
@@ -260,21 +315,26 @@ function extractValuesFromAnchor(url) {
   var result = { dob: null, testdate: null, tests: [], isLegacy: false };
 
   for (var i = 0; i < parts.length; i++) {
-    var keyVal = parts[i].split(/[=,]/);
-    var key = decodeURIComponent(keyVal[0]);
+    var eqIdx = parts[i].indexOf('=');
+    if (eqIdx === -1) continue;
+    var key = decodeURIComponent(parts[i].substring(0, eqIdx));
+    var rest = parts[i].substring(eqIdx + 1);
 
     if (key === 'dob') {
-      result.dob = decodeURIComponent(keyVal[1]);
+      result.dob = decodeURIComponent(rest);
     } else if (key === 'testdate') {
-      result.testdate = decodeURIComponent(keyVal[1]);
+      result.testdate = decodeURIComponent(rest);
     } else if (key === 'age') {
       // Old-format URL had age as a direct value; new format computes it from DOB + test date.
       result.isLegacy = true;
     } else {
+      var commaIdx = rest.indexOf(anchorUnitsSeparator);
+      var rawValue = commaIdx === -1 ? rest : rest.substring(0, commaIdx);
+      var rawUnits = commaIdx === -1 ? '' : rest.substring(commaIdx + 1);
       result.tests.push({
         id: key,
-        value: decodeURIComponent(keyVal[1]),
-        units: decodeURIComponent(keyVal[2])
+        value: decodeURIComponent(rawValue),
+        units: decodeURIComponent(rawUnits)
       });
     }
   }
@@ -296,18 +356,34 @@ function createAnchorFromValues(dob, testdate, formTests, values, units) {
 
 // --- Input parsing and validation ---
 
-function parseInput(value) {
-  if (value === '') {
-    return NaN;
-  } else {
-    return Number(value);
+// Decimal separator for the user's locale (most browsers normalise type="number"
+// inputs to '.' in the .value property, but be defensive for older engines and
+// for any other input paths that might pass a user-typed string through).
+var localeDecimal = (function() {
+  try {
+    var part = new Intl.NumberFormat().formatToParts(1.1).find(function(p) {
+      return p.type === 'decimal';
+    });
+    return part ? part.value : '.';
+  } catch (e) {
+    return '.';
   }
+})();
+
+function parseInput(value) {
+  if (value === '' || value == null) return NaN;
+  if (localeDecimal === ',' && typeof value === 'string') {
+    value = value.replace(/,/g, '.');
+  }
+  return Number(value);
 }
 
 function clearInputErrors() {
   var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
   for (var i = 0; i < errors.length; i++) {
     errors[i].classList.remove('errorNaN', 'input-error', 'input-warning');
+    errors[i].removeAttribute('aria-describedby');
+    errors[i].removeAttribute('aria-invalid');
   }
   var msgs = document.querySelectorAll('.error-message, .range-alert');
   for (var i = 0; i < msgs.length; i++) {
@@ -338,10 +414,13 @@ function checkRange(canonicalValue, formTest) {
   return 'ok';
 }
 
-// Format a canonical range value in the user's selected display unit
-function formatRangeInUnit(canonicalValue, unitIndex, formTest) {
-  var factor = formTest.to_canonical_factors[unitIndex];
-  var displayVal = canonicalValue / factor;
+// Format a canonical range value in the user's selected display unit.
+// Uses fromCanonical so transform-based units (e.g. lymphocyte absolute
+// counts) render correctly when the relevant context is supplied.
+function formatRangeInUnit(canonicalValue, unitIndex, formTest, context) {
+  var unit = formTest.units[unitIndex];
+  var displayVal = fromCanonical(canonicalValue, unit, formTest.id, context);
+  if (displayVal == null || isNaN(displayVal)) return '?';
   // Use sensible precision: more decimals for small numbers
   if (displayVal < 0.1) return displayVal.toPrecision(2);
   if (displayVal < 10) return displayVal.toFixed(2);
@@ -364,25 +443,28 @@ function showRangeAlert(elementId, level, message) {
   var el = document.getElementById(elementId);
   if (!el) return;
   el.classList.add(level === 'error' ? 'input-error' : 'input-warning');
+  if (level === 'error') el.setAttribute('aria-invalid', 'true');
   var row = el.closest('tr');
   if (row) {
+    var alertId = elementId + '-alert';
     var alert = document.createElement('tr');
     alert.className = 'range-alert';
     var td = document.createElement('td');
     td.setAttribute('colspan', '3');
     var p = document.createElement('p');
+    p.id = alertId;
     p.className = level === 'error' ? 'input-alert input-alert-error' : 'input-alert';
     p.textContent = message;
     td.appendChild(p);
     alert.appendChild(td);
     row.parentNode.insertBefore(alert, row.nextSibling);
+    el.setAttribute('aria-describedby', alertId);
   }
 }
 
 // --- Main calculation triggered by form input ---
 
 function calculateResult() {
-  console.log('### Calculating! ###');
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
   var warningsDiv = document.getElementById('resultWarnings');
@@ -395,6 +477,7 @@ function calculateResult() {
   var selectedUnits = [];
   var implausibleNames = [];
 
+  // Pass 1: read raw inputs and validate parseability + positivity.
   for (var i = 0; i < formTests.length; i++) {
     var valueElement = document.getElementById(formTests[i].id);
     var unitsElement = document.getElementById(formTests[i].id + 'Unit');
@@ -404,46 +487,68 @@ function calculateResult() {
     if (isNaN(rawValues[i]) && valueElement.value !== '') {
       markInputError(formTests[i].id);
       errors.push(t('error_invalid_value', formTests[i].name));
-    } else if (isNaN(rawValues[i])) {
-      // Missing value — not an error per se, just incomplete
-    } else {
+    } else if (!isNaN(rawValues[i])) {
       // Reject zero/negative — but skip if plausible_low allows zero (e.g. CRP "not detectable")
       if (rawValues[i] <= 0 && !(formTests[i].plausible_low !== null && formTests[i].plausible_low <= 0)) {
         markInputError(formTests[i].id, t('error_must_be_positive'));
-        errors.push(t('error_positive_detail', formTests[i].name));
+        errors.push(t('error_positive_detail', capitalizeFirst(formTests[i].name)));
       }
+    }
+  }
 
-      // Range validation: convert to canonical, check against ranges
-      var canonVal = toCanonical(rawValues[i], selectedUnits[i], formTests[i].id);
-      var rangeStatus = checkRange(canonVal, formTests[i]);
-      var unitIdx = formTests[i].units.indexOf(selectedUnits[i]);
-      if (rangeStatus === 'error') {
-        var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i]);
-        var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i]);
-        // Check if the raw value would be plausible in a different unit
-        var suggestedUnit = null;
-        if (formTests[i].units.length > 1) {
-          for (var u = 0; u < formTests[i].units.length; u++) {
-            if (u === unitIdx) continue;
-            var altCanon = rawValues[i] * formTests[i].to_canonical_factors[u];
-            if (checkRange(altCanon, formTests[i]) !== 'error') {
-              suggestedUnit = formTests[i].units[u];
-              break;
-            }
+  // Pass 2: convert to canonical in form order, building up a context so
+  // dependent conversions (e.g. lymphocyte-as-absolute-count needs wbc) can
+  // resolve. Form order matches model.biomarkers order, which puts referenced
+  // tests before their dependants.
+  var canonicalContext = {};
+  var canonicalByIndex = [];
+  for (var i = 0; i < formTests.length; i++) {
+    if (isNaN(rawValues[i])) { canonicalByIndex[i] = NaN; continue; }
+    var canon = toCanonical(rawValues[i], selectedUnits[i], formTests[i].id, canonicalContext);
+    canonicalByIndex[i] = canon;
+    if (canon != null && !isNaN(canon)) {
+      canonicalContext[formTests[i].id] = canon;
+    }
+  }
+
+  // Pass 3: range checks against canonical values. Skip when a dependent
+  // conversion couldn't resolve yet (e.g. lymphocyte abs without wbc).
+  for (var i = 0; i < formTests.length; i++) {
+    if (isNaN(rawValues[i])) continue;
+    var canonVal = canonicalByIndex[i];
+    if (canonVal == null || isNaN(canonVal)) continue;
+
+    var rangeStatus = checkRange(canonVal, formTests[i]);
+    var unitIdx = formTests[i].units.indexOf(selectedUnits[i]);
+    if (rangeStatus === 'error') {
+      var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i], canonicalContext);
+      var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i], canonicalContext);
+      // Check if the raw value would be plausible in a different unit
+      var suggestedUnit = null;
+      if (formTests[i].units.length > 1) {
+        for (var u = 0; u < formTests[i].units.length; u++) {
+          if (u === unitIdx) continue;
+          var altCanon = toCanonical(rawValues[i], formTests[i].units[u], formTests[i].id, canonicalContext);
+          if (altCanon != null && !isNaN(altCanon) &&
+              checkRange(altCanon, formTests[i]) !== 'error') {
+            suggestedUnit = formTests[i].units[u];
+            break;
           }
         }
-        var msg = t('range_implausible', selectedUnits[i], pLow, pHigh);
-        if (suggestedUnit) {
-          msg += ' ' + t('range_suggest_unit', suggestedUnit);
-        }
-        showRangeAlert(formTests[i].id, 'error', msg);
-        implausibleNames.push(formTests[i].name);
-      } else if (rangeStatus === 'warning') {
-        var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
-        var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i]);
-        showRangeAlert(formTests[i].id, 'warning',
-          t('range_warning', nLow, nHigh, selectedUnits[i]));
       }
+      var msg = t('range_implausible',
+        capitalizeFirst(formTests[i].name), pLow, pHigh, selectedUnits[i]);
+      if (suggestedUnit) {
+        msg += ' ' + t('range_suggest_unit', suggestedUnit);
+      }
+      showRangeAlert(formTests[i].id, 'error', msg);
+      implausibleNames.push(formTests[i].name);
+    } else if (rangeStatus === 'warning') {
+      var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i], canonicalContext);
+      var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i], canonicalContext);
+      showRangeAlert(formTests[i].id, 'warning',
+        t('range_warning',
+          capitalizeFirst(formTests[i].name), nLow, nHigh, selectedUnits[i]));
     }
   }
 
@@ -470,17 +575,25 @@ function calculateResult() {
   var hasDates = dobVal && testdateVal;
 
   if (!hasDates) {
-    // Show DOB prompt — escalate to error style if all biomarker values are filled
+    // Show DOB prompt — escalate to error style if all biomarker values are filled.
+    // Wording adapts to which date(s) are missing.
     if (dobPrompt) {
       dobPrompt.style.display = '';
+      var missingDob = !dobVal;
+      var missingTest = !testdateVal;
+      var promptKey;
       if (allFilled) {
+        promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
+          : missingDob ? 'dob_prompt_error_dob'
+          : 'dob_prompt_error_testdate';
         dobPrompt.className = 'dob-prompt dob-prompt-error';
-        dobPrompt.textContent = t('dob_prompt_error',
-          !testdateVal ? t('dob_prompt_error_and_test_date') : '');
       } else {
+        promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
+          : missingDob ? 'dob_prompt'
+          : 'dob_prompt_testdate';
         dobPrompt.className = 'dob-prompt';
-        dobPrompt.textContent = t('dob_prompt');
       }
+      dobPrompt.textContent = t(promptKey);
     }
     if (!allFilled) {
       warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
@@ -495,6 +608,9 @@ function calculateResult() {
 
   // Hide DOB prompt once dates are present
   if (dobPrompt) dobPrompt.style.display = 'none';
+  // The legacy-URL note nudges users to enter DOB; once they have, drop it.
+  var legacyNote = document.querySelector('.legacy-note');
+  if (legacyNote) legacyNote.remove();
 
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
@@ -537,12 +653,13 @@ function calculateResult() {
     return;
   }
 
-  // Convert all values to canonical (SI) units
-  var canonicalValues = {};
-  canonicalValues['age'] = age;
+  // Convert all values to canonical (SI) units. We rebuild rather than reuse
+  // canonicalContext above so that fillMissingWithDefaults paths and re-entry
+  // are robust, and so this stage uses the now-known full input set.
+  var canonicalValues = { age: age };
   for (var i = 0; i < formTests.length; i++) {
     var testId = formTests[i].id;
-    canonicalValues[testId] = toCanonical(rawValues[i], selectedUnits[i], testId);
+    canonicalValues[testId] = toCanonical(rawValues[i], selectedUnits[i], testId, canonicalValues);
   }
 
   // Compute the weighted sum using model coefficients
@@ -551,40 +668,13 @@ function calculateResult() {
     var bm = model.biomarkers[i];
     var canonicalVal = canonicalValues[bm.test_id];
 
-    // Convert from canonical to the unit the model coefficient expects
-    var modelVal;
-    if (bm.test_id === 'age') {
-      modelVal = canonicalVal;
-    } else {
-      modelVal = fromCanonical(canonicalVal, bm.unit, bm.test_id);
-    }
-
-    // Handle transforms
-    var modelRefValues = {};
-    if (bm.transform && bm.transform.indexOf('percentage_of:') === 0) {
-      var refId = bm.transform.split(':')[1];
-      var refBm = null;
-      for (var j = 0; j < model.biomarkers.length; j++) {
-        if (model.biomarkers[j].test_id === refId) { refBm = model.biomarkers[j]; break; }
-      }
-      // Find which form index corresponds to this biomarker
-      var formIdx = -1;
-      for (var j = 0; j < formTests.length; j++) {
-        if (formTests[j].id === bm.test_id) { formIdx = j; break; }
-      }
-      if (refBm && formIdx >= 0 && selectedUnits[formIdx] !== '%') {
-        var refModelVal = fromCanonical(canonicalValues[refId], refBm.unit, refId);
-        modelRefValues[refId] = refModelVal;
-        modelVal = applyTransform(modelVal, bm.transform, modelRefValues, bm.transform_floor);
-      }
-    } else {
-      modelVal = applyTransform(modelVal, bm.transform, {}, bm.transform_floor);
-    }
-
-    console.log(bm.test_id + ': ' +
-      (bm.test_id === 'age' ? age.toFixed(2) + ' years' : rawValues[formTests.findIndex(function(t) { return t.id === bm.test_id; })] + ' ' + selectedUnits[formTests.findIndex(function(t) { return t.id === bm.test_id; })]) +
-      ' → model (' + bm.unit + ') ' + modelVal +
-      ' × ' + bm.coefficient + ' = ' + (modelVal * bm.coefficient));
+    // Convert from canonical to the unit the model coefficient expects.
+    // (Unit conversion handles cross-test transforms like percentage_of, so
+    // applyTransform here is only ever used for log/floor on a single value.)
+    var modelVal = (bm.test_id === 'age')
+      ? canonicalVal
+      : fromCanonical(canonicalVal, bm.unit, bm.test_id, canonicalValues);
+    modelVal = applyTransform(modelVal, bm.transform, canonicalValues, bm.transform_floor);
 
     rollingTotal += modelVal * bm.coefficient;
   }
@@ -647,15 +737,23 @@ function calculateResult() {
   if (implausibleNames.length > 0) {
     var warningText = implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
-      : t('result_implausible_warning_many', implausibleNames.join(', '));
+      : t('result_implausible_warning_many', joinAndList(implausibleNames));
     warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
       warningText + '</div>';
   }
 
-  // 3. Descriptive summary text (below the share buttons)
-  var riskPct = formatSigFigs(riskOfDeath * 100, 2);
+  // 3. Descriptive summary text (below the share buttons).
+  // Use a dedicated "less than 0.1%" phrasing for tiny risks — otherwise a
+  // healthy 30-year-old sees something like "0.0050%" which reads as noise.
   var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
-  summaryEl.textContent = t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN);
+  if (riskOfDeath * 100 < 0.1) {
+    summaryEl.textContent = t('result_summary_low_risk',
+      age.toFixed(1), phenoAge.toFixed(1), oneInN);
+  } else {
+    var riskPct = formatSigFigs(riskOfDeath * 100, 2);
+    summaryEl.textContent = t('result_summary',
+      age.toFixed(1), phenoAge.toFixed(1), riskPct, oneInN);
+  }
 
   // 4. Save your result — in its own div below the share card
   if (saveSection) saveSection.style.display = '';
@@ -706,6 +804,10 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   // Update button text from strings
   var downloadBtn = document.getElementById('downloadImageBtn');
   if (downloadBtn) downloadBtn.textContent = t('share_download_image');
+
+  // Reassuring note that the image doesn't include the user's blood values
+  var imageNote = document.getElementById('shareImageNote');
+  if (imageNote) imageNote.textContent = t('share_image_note');
 
   // Build the HTML card
   container.innerHTML = generateResultCardHTML(
@@ -930,14 +1032,25 @@ function copyResultLink() {
   if (!input) return;
   input.select();
   input.setSelectionRange(0, 99999); // mobile
-  navigator.clipboard.writeText(input.value).then(function() {
-    var btn = input.nextElementSibling;
-    if (btn) {
-      var original = btn.textContent;
-      btn.textContent = t('save_copied');
-      setTimeout(function() { btn.textContent = original; }, 2000);
-    }
-  });
+
+  var btn = input.nextElementSibling;
+  function flashConfirm() {
+    if (!btn) return;
+    var original = btn.textContent;
+    btn.textContent = t('save_copied');
+    setTimeout(function() { btn.textContent = original; }, 2000);
+  }
+  function execCommandFallback() {
+    try {
+      if (document.execCommand('copy')) flashConfirm();
+    } catch (e) { /* nothing more to do */ }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(flashConfirm, execCommandFallback);
+  } else {
+    execCommandFallback();
+  }
 }
 
 function showBrowserSaveConfirm() {
@@ -983,13 +1096,14 @@ function createFormElements() {
   var dobInput = document.createElement('input');
   dobInput.setAttribute('type', 'date');
   dobInput.setAttribute('id', 'dob');
+  dobInput.setAttribute('max', getTodayString());
   dobInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
   if (saved && saved.dob) dobInput.value = saved.dob;
   dobRow.appendChild(dobLabel);
   dobRow.appendChild(dobInput);
   if (saved && saved.isLegacy) {
     var legacyNote = document.createElement('p');
-    legacyNote.className = 'input-alert';
+    legacyNote.className = 'input-alert legacy-note';
     legacyNote.textContent = t('legacy_note');
     dobRow.appendChild(legacyNote);
   }
@@ -1003,7 +1117,8 @@ function createFormElements() {
   var testdateInput = document.createElement('input');
   testdateInput.setAttribute('type', 'date');
   testdateInput.setAttribute('id', 'testdate');
-  testdateInput.setAttribute('oninput', 'calculateResult()');
+  testdateInput.setAttribute('max', getTodayString());
+  testdateInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
   if (saved && saved.testdate) {
     testdateInput.value = saved.testdate;
   } else {
@@ -1050,15 +1165,16 @@ function createFormElements() {
     var labelCell = document.createElement('th');
     var label = document.createElement('label');
     label.setAttribute('for', formTests[i].id);
-    label.textContent = formTests[i].name;
+    label.textContent = capitalizeFirst(formTests[i].name);
     labelCell.appendChild(label);
     formRow.appendChild(labelCell);
 
     var inputCell = document.createElement('td');
     var input = document.createElement('input');
-    input.setAttribute('type', 'text');
+    input.setAttribute('type', 'number');
+    input.setAttribute('step', 'any');
     input.setAttribute('id', formTests[i].id);
-    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('inputmode', 'decimal');
     input.setAttribute('placeholder', t('placeholder'));
     input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult(); updateDefaultsButton()');
     // Restore from anchor — match by test id, not array index
@@ -1153,13 +1269,19 @@ function updateDobPrompt() {
   var prompt = document.getElementById('dobPrompt');
   if (!prompt) return;
   var dobVal = document.getElementById('dob').value;
-  if (dobVal) {
+  var testdateVal = document.getElementById('testdate').value;
+  if (dobVal && testdateVal) {
     prompt.style.display = 'none';
-  } else {
-    prompt.style.display = '';
-    prompt.className = 'dob-prompt';
-    prompt.textContent = t('dob_prompt');
+    return;
   }
+  prompt.style.display = '';
+  prompt.className = 'dob-prompt';
+  var missingDob = !dobVal;
+  var missingTest = !testdateVal;
+  var key = (missingDob && missingTest) ? 'dob_prompt_both'
+    : missingDob ? 'dob_prompt'
+    : 'dob_prompt_testdate';
+  prompt.textContent = t(key);
 }
 
 function showDefaultsMessage(text, type) {
@@ -1201,6 +1323,22 @@ function fillMissingWithDefaults() {
   var age = calculateAge(dob, testDate);
   var filled = 0;
 
+  // Build a canonical context as we go: existing user values first, then each
+  // newly filled default. This means a lymphocyte input with an absolute-count
+  // unit selected can convert from its canonical % default once wbc has been
+  // filled (form order puts wbc first).
+  var ctx = { age: age };
+  for (var i = 0; i < formTests.length; i++) {
+    var existingInput = document.getElementById(formTests[i].id);
+    var existingUnitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var existingVal = parseInput(existingInput.value);
+    if (!isNaN(existingVal)) {
+      var existingUnit = existingUnitSelect.options[existingUnitSelect.selectedIndex].text;
+      var existingCanon = toCanonical(existingVal, existingUnit, formTests[i].id, ctx);
+      if (existingCanon != null && !isNaN(existingCanon)) ctx[formTests[i].id] = existingCanon;
+    }
+  }
+
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
     if (input.value !== '') continue; // don't overwrite user values
@@ -1211,7 +1349,8 @@ function fillMissingWithDefaults() {
     // Convert from canonical to the currently selected display unit
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
     var selectedUnit = unitSelect.options[unitSelect.selectedIndex].text;
-    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id);
+    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id, ctx);
+    if (displayVal == null || isNaN(displayVal)) continue; // missing dependency
 
     // Use sensible precision
     var rounded;
@@ -1222,6 +1361,7 @@ function fillMissingWithDefaults() {
 
     input.value = rounded;
     input.classList.add('default-value');
+    ctx[formTests[i].id] = canonicalDefault;
     filled++;
   }
 
@@ -1342,19 +1482,22 @@ function handleCSVUpload(fileInput) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var text = e.target.result;
-    // Strip UTF-8 BOM if present
+    // Strip UTF-8 BOM and normalise CRLF/CR line endings (Excel re-saves CSVs as CRLF).
     if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
-    var lines = text.trim().split('\n');
+    text = text.replace(/\r\n?/g, '\n');
+    var lines = text.split('\n');
     var loaded = 0;
+
+    var unquote = function(s) { return s.trim().replace(/^"|"$/g, ''); };
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (!line || line.charAt(0) === '#' || line.indexOf('field,') === 0) continue;
 
-      var parts = line.split(',');
-      var field = (parts[0] || '').trim();
-      var value = (parts[1] || '').trim();
-      var unit = (parts[2] || '').trim();
+      var parts = splitCSVLine(line);
+      var field = unquote(parts[0] || '');
+      var value = unquote(parts[1] || '');
+      var unit = unquote(parts[2] || '');
 
       if (!field || !value) continue;
 
@@ -1421,7 +1564,7 @@ function saveToLocalStorage() {
       data.tests.push({
         id: formTests[i].id,
         value: input.value,
-        unit: unitSelect.options[unitSelect.selectedIndex].text,
+        units: unitSelect.options[unitSelect.selectedIndex].text,
         isDefault: input.classList.contains('default-value')
       });
     }

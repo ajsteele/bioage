@@ -5,8 +5,11 @@
   "label_test_date": "Test date",
 
   "dob_prompt": "Please enter your date of birth above to get started.",
-  "dob_prompt_error": "Please enter your date of birth{0} to calculate your biological age.",
-  "dob_prompt_error_and_test_date": " and test date",
+  "dob_prompt_testdate": "Please enter the date of your test above to get started.",
+  "dob_prompt_both": "Please enter your date of birth and test date above to get started.",
+  "dob_prompt_error_dob": "Please enter your date of birth to calculate your biological age.",
+  "dob_prompt_error_testdate": "Please enter your test date to calculate your biological age.",
+  "dob_prompt_error_both": "Please enter your date of birth and test date to calculate your biological age.",
 
   "legacy_note": "Your test results were loaded from an older version of this calculator which stored your age directly. Please enter your date of birth and the date of the test so we can calculate your age more accurately.",
 
@@ -23,11 +26,12 @@
 
   "prompt_enter_all_values": "Please enter all values above to calculate your biological age.",
 
-  "range_implausible": "This value looks implausible ({0} typically {1}\u2013{2}). Please check the value and units.",
+  "range_implausible": "Are the value and units correct? {0} is typically {1}\u2013{2} {3}.",
   "range_suggest_unit": "Did you mean to select {0}?",
-  "range_warning": "This value is outside the typical range ({0}\u2013{1} {2}). The result may still be valid if your value is correct.",
+  "range_warning": "{0} is typically {1}\u2013{2} {3}. Your result may still be valid if this value is correct.",
 
   "result_summary": "Your chronological age at the test date was {0} years, and your calculated biological age was {1} years, which means that your risk of death from age-related causes in the coming year is approximately {2}%, or around 1 in {3}.",
+  "result_summary_low_risk": "Your chronological age at the test date was {0} years, and your calculated biological age was {1} years, which means that your risk of death from age-related causes in the coming year is less than 0.1%, or around 1 in {2}.",
   "defaults_warning_one": "This result is approximate: one value is a population average.",
   "defaults_warning_few": "This result is approximate: {0} of {1} values are population averages.",
   "defaults_warning_very": "This result is very approximate: {0} of {1} values are population averages.",
@@ -35,6 +39,7 @@
   "defaults_warning_all": "This result is entirely based on population averages! Please enter some of your own blood test results to get a meaningful biological age estimate.",
   "result_implausible_warning_one": "The value for {0} looks implausible. Please check it and the selected units before relying on this result.",
   "result_implausible_warning_many": "The values for {0} look implausible. Please check them and the selected units before relying on this result.",
+  "list_and": "and",
 
   "save_section_heading": "Save your result",
   "save_link_label": "Result link (contains your blood test values\u2014share with care):",
@@ -66,7 +71,7 @@
   "card_biological_label": "biological",
   "card_chronological_label": "chronological",
   "card_cta": "Calculate yours at",
-  "card_url": "andrewsteele.co.uk/biological-age",
+  "card_url": "the-li.org/calc",
   "card_methodology": "blood biomarkers using PhenoAge",
   "card_aria_label": "Biological age result card: biological age {0}, chronological age {1}, {2}",
 

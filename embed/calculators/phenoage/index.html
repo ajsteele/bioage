@@ -34,10 +34,11 @@
       <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
       <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
     </div>
+    <p id="shareImageNote" class="share-image-note"></p>
     <p id="resultSummary" class="result-summary"></p>
     <script>
       if (navigator.share && navigator.canShare) {
-        document.getElementById(‘nativeShareBtn’).style.display = ‘’;
+        document.getElementById('nativeShareBtn').style.display = '';
       }
     </script>
   </div>
