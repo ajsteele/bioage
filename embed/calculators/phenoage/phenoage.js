@@ -27,6 +27,24 @@ function t(key) {
   return s;
 }
 
+// Test names are stored sentence-case (e.g. "albumin") so they read naturally
+// mid-sentence in joined lists. Use this when one starts a sentence or labels
+// a field.
+function capitalizeFirst(s) {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Join a list with commas and a final conjunction, e.g.
+// ['a','b','c'] -> "a, b, and c". For two items: "a and b". For one: "a".
+function joinAndList(items) {
+  if (!items || items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  var conj = t('list_and');
+  if (items.length === 2) return items[0] + ' ' + conj + ' ' + items[1];
+  return items.slice(0, -1).join(', ') + ', ' + conj + ' ' + items[items.length - 1];
+}
+
 // --- Config loading ---
 
 // Split a single CSV line, respecting quoted fields (commas inside quotes are
@@ -473,7 +491,7 @@ function calculateResult() {
       // Reject zero/negative — but skip if plausible_low allows zero (e.g. CRP "not detectable")
       if (rawValues[i] <= 0 && !(formTests[i].plausible_low !== null && formTests[i].plausible_low <= 0)) {
         markInputError(formTests[i].id, t('error_must_be_positive'));
-        errors.push(t('error_positive_detail', formTests[i].name));
+        errors.push(t('error_positive_detail', capitalizeFirst(formTests[i].name)));
       }
     }
   }
@@ -518,7 +536,8 @@ function calculateResult() {
           }
         }
       }
-      var msg = t('range_implausible', selectedUnits[i], pLow, pHigh);
+      var msg = t('range_implausible',
+        capitalizeFirst(formTests[i].name), pLow, pHigh, selectedUnits[i]);
       if (suggestedUnit) {
         msg += ' ' + t('range_suggest_unit', suggestedUnit);
       }
@@ -528,7 +547,8 @@ function calculateResult() {
       var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i], canonicalContext);
       var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i], canonicalContext);
       showRangeAlert(formTests[i].id, 'warning',
-        t('range_warning', nLow, nHigh, selectedUnits[i]));
+        t('range_warning',
+          capitalizeFirst(formTests[i].name), nLow, nHigh, selectedUnits[i]));
     }
   }
 
@@ -717,7 +737,7 @@ function calculateResult() {
   if (implausibleNames.length > 0) {
     var warningText = implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
-      : t('result_implausible_warning_many', implausibleNames.join(', '));
+      : t('result_implausible_warning_many', joinAndList(implausibleNames));
     warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
       warningText + '</div>';
   }
@@ -1145,7 +1165,7 @@ function createFormElements() {
     var labelCell = document.createElement('th');
     var label = document.createElement('label');
     label.setAttribute('for', formTests[i].id);
-    label.textContent = formTests[i].name;
+    label.textContent = capitalizeFirst(formTests[i].name);
     labelCell.appendChild(label);
     formRow.appendChild(labelCell);
 
