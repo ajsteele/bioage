@@ -39,19 +39,20 @@
 
 :root {
   /* LI brand light (default) */
-  --calc-bg: #f8f7f4;
-  --calc-text: #1a1a2e;
+  --calc-bg: #eae8e6;
+  --calc-text: #0f2846;
   --calc-text-muted: #555;
-  --calc-text-faint: #888;
-  --calc-accent: #0066cc;
-  --calc-link: #0066cc;
+  --calc-text-faint: #807d78;
+  --calc-accent: #2e5ea8;
+  --calc-accent-soft: rgba(46, 94, 168, 0.15);
+  --calc-link: #2e5ea8;
   --calc-input-bg: #ffffff;
-  --calc-input-border: #ccc;
-  --calc-btn-bg: #f0f0ed;
-  --calc-btn-hover: #e2e2dd;
-  --calc-border: #ddd;
-  --calc-card-bg: #edf3fa;
-  --calc-card-border: #d0e3f0;
+  --calc-input-border: #c0bcb5;
+  --calc-btn-bg: #e0deda;
+  --calc-btn-hover: #d4d1ca;
+  --calc-border: #d4d1ca;
+  --calc-card-bg: #e3ecf6;
+  --calc-card-border: #b8cce6;
 
   /* Semantic colours (don't change with theme) */
   --calc-warning-text: #664d03;
@@ -63,44 +64,55 @@
   --calc-success-text: #0f5132;
   --calc-success-bg: #d1e7dd;
   --calc-success-border: #badbcc;
-  --calc-info-text: #055160;
-  --calc-info-bg: #cff4fc;
-  --calc-info-border: #b6effb;
+  --calc-info-text: #0f2846;
+  --calc-info-bg: #e3ecf6;
+  --calc-info-border: #b8cce6;
+
+  /* Terminal / status panel */
+  --calc-terminal-bg: #0f2846;
+  --calc-terminal-text: #c5d4e6;
+  --calc-terminal-prompt: #5bc198;
+  --calc-terminal-ok: #5bc198;
+  --calc-terminal-warn: #fbbf24;
+  --calc-terminal-err: #ff8a8a;
+  --calc-terminal-border: #1f3a5e;
 }
 
 /* Dark theme */
 .theme-dark {
-  --calc-bg: #1a1a2e;
-  --calc-text: #e0e0e0;
-  --calc-text-muted: #aaa;
-  --calc-text-faint: #888;
+  --calc-bg: #0f2846;
+  --calc-text: #eae8e6;
+  --calc-text-muted: #b0bccb;
+  --calc-text-faint: #7d8ca3;
   --calc-accent: #5b9bd5;
+  --calc-accent-soft: rgba(91, 155, 213, 0.2);
   --calc-link: #7db8f0;
-  --calc-input-bg: #2a2a3e;
-  --calc-input-border: #444;
-  --calc-btn-bg: #2a2a3e;
-  --calc-btn-hover: #3a3a4e;
-  --calc-border: #3a3a4e;
-  --calc-card-bg: #222240;
-  --calc-card-border: #3a3a5e;
+  --calc-input-bg: #16314f;
+  --calc-input-border: #2c4666;
+  --calc-btn-bg: #1a3354;
+  --calc-btn-hover: #234271;
+  --calc-border: #234271;
+  --calc-card-bg: #1a3354;
+  --calc-card-border: #2c4666;
 }
 
 /* Auto theme: follows user's OS preference */
 @media (prefers-color-scheme: dark) {
   .theme-auto {
-    --calc-bg: #1a1a2e;
-    --calc-text: #e0e0e0;
-    --calc-text-muted: #aaa;
-    --calc-text-faint: #888;
+    --calc-bg: #0f2846;
+    --calc-text: #eae8e6;
+    --calc-text-muted: #b0bccb;
+    --calc-text-faint: #7d8ca3;
     --calc-accent: #5b9bd5;
+    --calc-accent-soft: rgba(91, 155, 213, 0.2);
     --calc-link: #7db8f0;
-    --calc-input-bg: #2a2a3e;
-    --calc-input-border: #444;
-    --calc-btn-bg: #2a2a3e;
-    --calc-btn-hover: #3a3a4e;
-    --calc-border: #3a3a4e;
-    --calc-card-bg: #222240;
-    --calc-card-border: #3a3a5e;
+    --calc-input-bg: #16314f;
+    --calc-input-border: #2c4666;
+    --calc-btn-bg: #1a3354;
+    --calc-btn-hover: #234271;
+    --calc-border: #234271;
+    --calc-card-bg: #1a3354;
+    --calc-card-border: #2c4666;
   }
 }
 
@@ -109,7 +121,15 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--calc-bg);
   color: var(--calc-text);
-  padding: 0 0.5em;
+  padding: 0 1em;
+  max-width: 720px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+h1 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 a {
@@ -124,6 +144,7 @@ a {
 .error-message {
   color: var(--calc-error-text);
   font-size: 0.85em;
+  margin-left: 0.4em;
 }
 
 .bioageform .result {
@@ -147,44 +168,117 @@ a {
 .bioageform select:disabled {
     appearance: none;
     border: none;
-    display: inline;
     background: none;
     color: var(--calc-text);
+    padding-right: 0;
+    background-image: none;
+    cursor: default;
+}
+
+/* Biomarker form table */
+.bioageform table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.5em 0;
+}
+
+.bioageform tbody tr > th,
+.bioageform tbody tr > td {
+  padding: 4px 0;
+  vertical-align: middle;
+}
+
+.bioageform tbody tr > th {
+  text-align: right;
+  padding-right: 0.8em;
+  font-weight: 500;
+  font-size: 0.95em;
+  width: 40%;
+  white-space: nowrap;
+}
+
+.bioageform tbody tr > th label {
+  cursor: pointer;
+}
+
+.bioageform tbody tr > td:nth-of-type(1) input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bioageform tbody tr > td:nth-of-type(2) {
+  width: 8em;
+  padding-left: 6px;
+}
+
+.bioageform tbody tr > td:nth-of-type(2) select {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Date of birth and test date section */
 .date-section {
-  margin-bottom: 1em;
+  margin: 1em 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
 }
 
 .csv-load-row {
-  margin-top: 0.3em;
   display: flex;
   align-items: center;
   gap: 0.8em;
-}
-
-.csv-message {
-  font-size: 0.85em;
-  color: var(--calc-success-text);
-}
-
-.csv-message-error {
-  color: var(--calc-error-text);
+  flex-wrap: wrap;
 }
 
 .date-row {
-  margin-bottom: 0.5em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.6em 0.8em;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.date-row label {
-  display: inline-block;
-  width: 10em;
-  font-weight: bold;
+.date-row > label {
+  font-weight: 500;
+  min-width: 8em;
 }
 
 .date-row input[type="date"] {
   font-size: 1em;
+}
+
+/* Soft info card when a date row needs guidance, escalates to error tone
+   when there's an inline error. Class-toggled in JS so the visual card
+   wraps the inline message that gets injected into it. */
+.date-row.date-row--info {
+  background: var(--calc-info-bg);
+  border-color: var(--calc-info-border);
+}
+
+.date-row.date-row--error {
+  background: var(--calc-error-bg);
+  border-color: var(--calc-error-border);
+}
+
+.date-row .dob-prompt,
+.date-row .input-alert,
+.date-row .error-message {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.85em;
+}
+
+.date-row .error-message {
+  color: var(--calc-error-text);
+  font-weight: 500;
 }
 
 /* Form inputs */
@@ -192,9 +286,41 @@ input[type="text"],
 input[type="number"],
 input[type="date"],
 select {
+  font: inherit;
+  font-size: 1em;
+  padding: 0.45em 0.6em;
   background: var(--calc-input-bg);
   color: var(--calc-text);
   border: 1px solid var(--calc-input-border);
+  border-radius: 4px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--calc-accent);
+  box-shadow: 0 0 0 3px var(--calc-accent-soft);
+}
+
+/* Custom chevron on selects (so they all look uniform regardless of OS) */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 2em;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%230f2846' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.7em center;
+  background-size: 10px 6px;
+  cursor: pointer;
+}
+
+.theme-dark select,
+.theme-auto select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%23eae8e6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
 }
 
 /* Hide spinner controls on number inputs — users will type values, not step. */
@@ -210,41 +336,41 @@ input[type="number"] {
 
 /* Range validation states on inputs */
 .input-warning {
-  border: 1px solid var(--calc-warning-border);
+  border-color: #d4a72c;
   background: var(--calc-warning-bg);
 }
 
 .input-error {
-  border: 1px solid var(--calc-error-border);
+  border-color: #c0392b;
   background: var(--calc-error-bg);
 }
 
-/* Prompt to enter DOB, shown above the biomarker table */
+/* Prompt to enter DOB, shown inside the relevant date row */
 .dob-prompt {
-  margin: 0.5em 0 1em;
-  padding: 0.6em 0.8em;
-  font-size: 0.95em;
+  font-size: 0.9em;
   color: var(--calc-info-text);
-  background: var(--calc-info-bg);
-  border: 1px solid var(--calc-info-border);
-  border-radius: 4px;
 }
 
 .dob-prompt-error {
   color: var(--calc-error-text);
-  background: var(--calc-error-bg);
-  border-color: var(--calc-error-border);
 }
 
-/* Informational alerts attached to form inputs */
+/* Informational alerts attached to form inputs (range warnings/errors).
+   Sit in a tr below the input, span all columns, and visually anchor to the
+   input via the same coloured border. */
+.bioageform .range-alert > td {
+  padding: 0 0 8px;
+}
+
 .input-alert {
-  margin: 0.3em 0 0.2em;
+  margin: 0;
   padding: 0.5em 0.7em;
   font-size: 0.85em;
   color: var(--calc-warning-text);
   background: var(--calc-warning-bg);
   border: 1px solid var(--calc-warning-border);
-  border-radius: 4px;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
 }
 
 .input-alert-error {
@@ -253,14 +379,22 @@ input[type="number"] {
   border-color: var(--calc-error-border);
 }
 
+/* Make the input above an alert visually attach to it (no rounded bottom). */
+.bioageform tr:has(+ .range-alert) input,
+.bioageform tr:has(+ .range-alert) select {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* Warning banner shown under result when implausible values present */
 .result-warning {
   margin: 0.8em 0;
-  padding: 0.6em 0.8em;
+  padding: 0.6em 0.9em;
   font-size: 0.9em;
   color: var(--calc-error-text);
   background: var(--calc-error-bg);
   border: 1px solid var(--calc-error-border);
+  border-left: 3px solid var(--calc-error-text);
   border-radius: 4px;
 }
 
@@ -336,17 +470,20 @@ input[type="number"] {
 }
 
 .defaults-section button {
+  font: inherit;
   font-size: 0.95em;
-  padding: 0.4em 1em;
+  padding: 0.5em 1em;
   cursor: pointer;
   border: 1px solid var(--calc-input-border);
   border-radius: 4px;
   background: var(--calc-btn-bg);
   color: var(--calc-text);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .defaults-section button:hover:not(:disabled) {
   background: var(--calc-btn-hover);
+  border-color: var(--calc-text-muted);
 }
 
 .defaults-section button:disabled {
@@ -354,27 +491,75 @@ input[type="number"] {
   cursor: default;
 }
 
-.defaults-message {
-  font-size: 0.85em;
-  padding: 0.4em 0.6em;
-  margin: 0.4em 0 0;
-  border-radius: 4px;
-  background: var(--calc-warning-bg);
-  color: var(--calc-warning-text);
-  border: 1px solid var(--calc-warning-border);
-}
-
-.defaults-message.success {
-  background: var(--calc-success-bg);
-  color: var(--calc-success-text);
-  border-color: var(--calc-success-border);
-}
-
 .defaults-note {
   font-size: 0.8em;
   color: var(--calc-text-faint);
   margin: 0.3em 0 0;
 }
+
+/* Terminal-style status panel — non-field messages collect here so the user
+   has a single, predictable place to look for what just happened. */
+.status-terminal {
+  margin: 1.2em 0;
+  background: var(--calc-terminal-bg);
+  border: 1px solid var(--calc-terminal-border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.85em;
+  color: var(--calc-terminal-text);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.status-terminal__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--calc-terminal-border);
+  color: rgba(197, 212, 230, 0.7);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-terminal__dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff6058;
+  box-shadow: 14px 0 0 #ffbd2e, 28px 0 0 #28c941;
+  margin-right: 18px;
+}
+
+.status-terminal__body {
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.status-terminal__line {
+  display: flex;
+  gap: 6px;
+  word-break: break-word;
+}
+
+.status-terminal__line::before {
+  content: ">";
+  color: var(--calc-terminal-prompt);
+  flex-shrink: 0;
+}
+
+.status-terminal__line--ok { color: var(--calc-terminal-ok); }
+.status-terminal__line--warn { color: var(--calc-terminal-warn); }
+.status-terminal__line--err { color: var(--calc-terminal-err); }
+
+.status-terminal__line--ok::before { content: "✓"; color: var(--calc-terminal-ok); }
+.status-terminal__line--warn::before { content: "!"; color: var(--calc-terminal-warn); }
+.status-terminal__line--err::before { content: "✗"; color: var(--calc-terminal-err); }
 
 /* CSV download button */
 .csv-download {

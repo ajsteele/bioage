@@ -378,6 +378,32 @@ function parseInput(value) {
   return Number(value);
 }
 
+// --- Status terminal ---
+//
+// Single bottom-of-page log for non-field-specific events (CSV loaded, defaults
+// filled, calculation complete, awaiting input, etc.). Field-specific errors
+// stay inline next to the field they relate to — we don't double them up here.
+
+function setStatusHeading() {
+  var label = document.querySelector('.status-terminal__label');
+  if (label) label.textContent = t('status_heading');
+}
+
+function addStatus(text, level) {
+  var body = document.getElementById('statusTerminalBody');
+  if (!body || !text) return;
+  // Skip if the latest line already says exactly this — avoids spam from
+  // rapid input events.
+  var last = body.lastElementChild;
+  if (last && last.textContent === text && last.dataset.level === (level || '')) return;
+  var line = document.createElement('div');
+  line.className = 'status-terminal__line' + (level ? ' status-terminal__line--' + level : '');
+  line.dataset.level = level || '';
+  line.textContent = text;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
 function clearInputErrors() {
   var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
   for (var i = 0; i < errors.length; i++) {
@@ -389,16 +415,29 @@ function clearInputErrors() {
   for (var i = 0; i < msgs.length; i++) {
     msgs[i].remove();
   }
+  // Clear date-row error tone (placeDobPrompt will re-apply info/error as
+  // appropriate for the current state).
+  ['dobRow', 'testdateRow'].forEach(function(id) {
+    var row = document.getElementById(id);
+    if (row) row.classList.remove('date-row--error');
+  });
 }
 
 function markInputError(elementId, message) {
   var el = document.getElementById(elementId);
-  if (el) el.classList.add('errorNaN');
-  if (message) {
+  if (el) el.classList.add('errorNaN', 'input-error');
+  if (message && el && el.parentNode) {
     var msg = document.createElement('span');
     msg.className = 'error-message';
-    msg.textContent = ' ' + message;
-    if (el && el.parentNode) el.parentNode.appendChild(msg);
+    msg.textContent = message;
+    el.parentNode.appendChild(msg);
+  }
+  // For date-row inputs, escalate the surrounding card to the error tone so
+  // the message and the field share the same visual container.
+  var row = el && el.closest && el.closest('.date-row');
+  if (row) {
+    row.classList.remove('date-row--info');
+    row.classList.add('date-row--error');
   }
 }
 
@@ -553,7 +592,8 @@ function calculateResult() {
   }
 
   if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+    warningsDiv.innerHTML = '';
+    addStatus(t('error_prefix', errors.join('; ')), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -576,29 +616,17 @@ function calculateResult() {
 
   if (!hasDates) {
     // Show DOB prompt — escalate to error style if all biomarker values are filled.
-    // Wording adapts to which date(s) are missing.
-    if (dobPrompt) {
-      dobPrompt.style.display = '';
-      var missingDob = !dobVal;
-      var missingTest = !testdateVal;
-      var promptKey;
-      if (allFilled) {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
-          : missingDob ? 'dob_prompt_error_dob'
-          : 'dob_prompt_error_testdate';
-        dobPrompt.className = 'dob-prompt dob-prompt-error';
-      } else {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
-          : missingDob ? 'dob_prompt'
-          : 'dob_prompt_testdate';
-        dobPrompt.className = 'dob-prompt';
-      }
-      dobPrompt.textContent = t(promptKey);
-    }
+    // Wording adapts to which date(s) are missing, and the prompt is parented
+    // to whichever row needs filling so the visual card wraps it.
+    placeDobPrompt(allFilled);
+    warningsDiv.innerHTML = '';
     if (!allFilled) {
-      warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
+      addStatus(t('prompt_enter_all_values'), 'warn');
     } else {
-      warningsDiv.innerHTML = '';
+      var statusKey = (!dobVal && !testdateVal) ? 'status_awaiting_dates'
+        : !dobVal ? 'status_awaiting_dob'
+        : 'status_awaiting_testdate';
+      addStatus(t(statusKey), 'warn');
     }
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
@@ -615,21 +643,24 @@ function calculateResult() {
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
 
+  // Date validation: inline-only, no duplicate in the status panel — the
+  // input card already shows the message right next to the field.
+  var dateError = false;
   if (isNaN(dob.getTime())) {
     markInputError('dob', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_dob')));
+    dateError = true;
   }
   if (isNaN(testDate.getTime())) {
     markInputError('testdate', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_test_date')));
+    dateError = true;
   }
   if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
     markInputError('testdate', t('error_test_date_after_dob'));
-    errors.push(t('error_test_date_after_dob_detail'));
+    dateError = true;
   }
 
-  if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+  if (dateError) {
+    warningsDiv.innerHTML = '';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -638,7 +669,8 @@ function calculateResult() {
 
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
+    warningsDiv.innerHTML = '';
+    addStatus(t('error_prefix', t('error_age_out_of_range', age.toFixed(1))), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -646,7 +678,8 @@ function calculateResult() {
   }
 
   if (!allFilled) {
-    warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
+    warningsDiv.innerHTML = '';
+    addStatus(t('prompt_enter_all_values'), 'warn');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -694,12 +727,15 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    warningsDiv.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
+    warningsDiv.innerHTML = '';
+    addStatus(t('error_calculation_failed'), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
     return;
   }
+
+  addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
 
   // 1. Share card (the primary visual result)
   generateShareCard(phenoAge, age, acceleration);
@@ -1090,6 +1126,7 @@ function createFormElements() {
 
   var dobRow = document.createElement('div');
   dobRow.className = 'date-row';
+  dobRow.id = 'dobRow';
   var dobLabel = document.createElement('label');
   dobLabel.setAttribute('for', 'dob');
   dobLabel.textContent = t('label_dob');
@@ -1111,6 +1148,7 @@ function createFormElements() {
 
   var testdateRow = document.createElement('div');
   testdateRow.className = 'date-row';
+  testdateRow.id = 'testdateRow';
   var testdateLabel = document.createElement('label');
   testdateLabel.setAttribute('for', 'testdate');
   testdateLabel.textContent = t('label_test_date');
@@ -1148,13 +1186,16 @@ function createFormElements() {
 
   formDiv.appendChild(dateSection);
 
-  // DOB prompt — shown when date of birth is not yet entered
+  // DOB prompt — placed inside whichever date row needs filling, so the row's
+  // info-card styling visually wraps the message.
   var dobPrompt = document.createElement('div');
   dobPrompt.className = 'dob-prompt';
   dobPrompt.id = 'dobPrompt';
   dobPrompt.textContent = t('dob_prompt');
-  if (saved && saved.dob) dobPrompt.style.display = 'none';
-  formDiv.appendChild(dobPrompt);
+  if (saved && saved.dob && saved.testdate) dobPrompt.style.display = 'none';
+  // Initial parent: dob row (it'll be moved by updateDobPrompt as needed).
+  dobRow.appendChild(dobPrompt);
+  updateDobPrompt();
 
   // Biomarker inputs table
   var formTable = document.createElement('table');
@@ -1194,6 +1235,11 @@ function createFormElements() {
     var select = document.createElement('select');
     select.setAttribute('id', formTests[i].id + 'Unit');
     select.setAttribute('oninput', 'calculateResult()');
+    // Skip in tab order: unit changes are essentially always done with the
+    // mouse, and including them gives an inconsistent number of tab stops per
+    // row (rows whose only available unit is canonical use a disabled select,
+    // which the browser already skips).
+    select.setAttribute('tabindex', '-1');
     unitCell.appendChild(select);
     formRow.appendChild(unitCell);
 
@@ -1265,34 +1311,58 @@ function createFormElements() {
 
 // --- Fill missing values with age-appropriate population defaults ---
 
-function updateDobPrompt() {
+// Move the DOB prompt into whichever date row it relates to, so the row's
+// info-card styling visually wraps the prompt right under the field that
+// needs filling in.
+function clearDateRowState() {
+  ['dobRow', 'testdateRow'].forEach(function(id) {
+    var row = document.getElementById(id);
+    if (row) row.classList.remove('date-row--info', 'date-row--error');
+  });
+}
+
+function placeDobPrompt(asError) {
   var prompt = document.getElementById('dobPrompt');
   if (!prompt) return;
   var dobVal = document.getElementById('dob').value;
   var testdateVal = document.getElementById('testdate').value;
+  clearDateRowState();
   if (dobVal && testdateVal) {
     prompt.style.display = 'none';
     return;
   }
-  prompt.style.display = '';
-  prompt.className = 'dob-prompt';
   var missingDob = !dobVal;
   var missingTest = !testdateVal;
-  var key = (missingDob && missingTest) ? 'dob_prompt_both'
-    : missingDob ? 'dob_prompt'
-    : 'dob_prompt_testdate';
-  prompt.textContent = t(key);
+  var promptKey, targetId;
+  if (asError) {
+    promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
+      : missingDob ? 'dob_prompt_error_dob'
+      : 'dob_prompt_error_testdate';
+  } else {
+    promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
+      : missingDob ? 'dob_prompt'
+      : 'dob_prompt_testdate';
+  }
+  targetId = missingDob ? 'dobRow' : 'testdateRow';
+
+  prompt.style.display = '';
+  prompt.className = 'dob-prompt' + (asError ? ' dob-prompt-error' : '');
+  prompt.textContent = t(promptKey);
+  var target = document.getElementById(targetId);
+  if (target) {
+    if (prompt.parentNode !== target) target.appendChild(prompt);
+    target.classList.add(asError ? 'date-row--error' : 'date-row--info');
+  }
+}
+
+function updateDobPrompt() {
+  placeDobPrompt(false);
 }
 
 function showDefaultsMessage(text, type) {
-  var section = document.getElementById('defaultsSection');
-  if (!section) return;
-  var existing = section.querySelector('.defaults-message');
-  if (existing) existing.remove();
-  var msg = document.createElement('p');
-  msg.className = 'defaults-message' + (type === 'success' ? ' success' : '');
-  msg.textContent = text;
-  section.appendChild(msg);
+  // Routed through the status terminal so all non-field messages live in the
+  // same place (and we only have one log to look at).
+  addStatus(text, type === 'success' ? 'ok' : 'warn');
 }
 
 function updateDefaultsButton() {
@@ -1465,14 +1535,7 @@ function pad(n) {
 }
 
 function showCSVMessage(text, isError) {
-  var row = document.querySelector('.csv-load-row');
-  if (!row) return;
-  var existing = row.querySelector('.csv-message');
-  if (existing) existing.remove();
-  var msg = document.createElement('span');
-  msg.className = 'csv-message' + (isError ? ' csv-message-error' : '');
-  msg.textContent = text;
-  row.appendChild(msg);
+  addStatus(text, isError ? 'err' : 'ok');
 }
 
 function handleCSVUpload(fileInput) {
@@ -1596,9 +1659,11 @@ function clearLocalStorage() {
 
 window.onload = function() {
   loadStrings('en').then(function() {
+    setStatusHeading();
     return loadConfig();
   }).then(function() {
     createFormElements();
+    addStatus(t('status_ready'));
   }).catch(function(err) {
     console.error('Failed to load config:', err);
     document.getElementById('phenoAgeForm').innerHTML =
