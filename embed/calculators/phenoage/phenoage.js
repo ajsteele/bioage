@@ -296,12 +296,26 @@ function createAnchorFromValues(dob, testdate, formTests, values, units) {
 
 // --- Input parsing and validation ---
 
-function parseInput(value) {
-  if (value === '') {
-    return NaN;
-  } else {
-    return Number(value);
+// Decimal separator for the user's locale (most browsers normalise type="number"
+// inputs to '.' in the .value property, but be defensive for older engines and
+// for any other input paths that might pass a user-typed string through).
+var localeDecimal = (function() {
+  try {
+    var part = new Intl.NumberFormat().formatToParts(1.1).find(function(p) {
+      return p.type === 'decimal';
+    });
+    return part ? part.value : '.';
+  } catch (e) {
+    return '.';
   }
+})();
+
+function parseInput(value) {
+  if (value === '' || value == null) return NaN;
+  if (localeDecimal === ',' && typeof value === 'string') {
+    value = value.replace(/,/g, '.');
+  }
+  return Number(value);
 }
 
 function clearInputErrors() {
@@ -1066,9 +1080,10 @@ function createFormElements() {
 
     var inputCell = document.createElement('td');
     var input = document.createElement('input');
-    input.setAttribute('type', 'text');
+    input.setAttribute('type', 'number');
+    input.setAttribute('step', 'any');
     input.setAttribute('id', formTests[i].id);
-    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('inputmode', 'decimal');
     input.setAttribute('placeholder', t('placeholder'));
     input.setAttribute('oninput', 'clearDefaultStyling(this); calculateResult(); updateDefaultsButton()');
     // Restore from anchor — match by test id, not array index

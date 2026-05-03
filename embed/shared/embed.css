@@ -190,6 +190,17 @@ select {
   border: 1px solid var(--calc-input-border);
 }
 
+/* Hide spinner controls on number inputs — users will type values, not step. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Range validation states on inputs */
 .input-warning {
   border: 1px solid var(--calc-warning-border);
