@@ -1,0 +1,126 @@
+/* Dog years calculator — page-specific styles */
+
+.age-input-row {
+  display: flex;
+  gap: 1.5em;
+  margin: 1em 0;
+}
+
+.age-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.age-input-group label {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+
+.age-input-group input {
+  width: 6em;
+  font-size: 1.1em;
+  padding: 0.4em 0.6em;
+  border: 1px solid var(--calc-input-border);
+  border-radius: 4px;
+  font-family: inherit;
+  background: var(--calc-input-bg);
+  color: var(--calc-text);
+}
+
+.age-input-group input:focus {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: -1px;
+}
+
+/* Result display */
+.result-card {
+  margin: 1.5em 0;
+  padding: 1.2em 1.5em;
+  background: var(--calc-card-bg);
+  border: 1px solid var(--calc-card-border);
+  border-radius: 8px;
+}
+
+.result-main {
+  font-size: 1.4em;
+  font-weight: 600;
+  color: var(--calc-accent);
+  margin: 0 0 0.1em;
+}
+
+.result-sub {
+  font-size: 0.9em;
+  color: var(--calc-text-muted);
+  margin: 0 0 1em;
+}
+
+.result-traditional {
+  margin: 0.5em 0 0.3em;
+  font-size: 0.95em;
+}
+
+.result-difference {
+  font-size: 0.85em;
+  color: var(--calc-text-faint);
+  margin: 0.2em 0 0;
+}
+
+/* Photo upload */
+.photo-upload-label {
+  display: inline-block;
+  padding: 0.5em 1em;
+  border: 2px dashed var(--calc-input-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95em;
+  color: var(--calc-text-muted);
+  transition: border-color 0.15s;
+}
+
+.photo-upload-label:hover {
+  border-color: var(--calc-accent);
+  color: var(--calc-accent);
+}
+
+.photo-upload-hint {
+  display: block;
+  font-size: 0.8em;
+  color: var(--calc-text-faint);
+  margin-top: 0.2em;
+}
+
+#photoPreview {
+  margin: 0.8em 0;
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+#photoPreviewImg {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--calc-border);
+}
+
+#photoRemoveBtn {
+  font-size: 0.85em;
+  padding: 0.3em 0.8em;
+  cursor: pointer;
+  border: 1px solid var(--calc-input-border);
+  border-radius: 4px;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
+  font-family: inherit;
+}
+
+#photoRemoveBtn:hover {
+  background: var(--calc-btn-hover);
+}
+
+/* Share card container — reuse .share-card from embed.css */
+#shareCardContainer {
+  margin: 1em 0;
+}

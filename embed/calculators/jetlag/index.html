@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="canonical" href="https://thelongevityinitiative.org/calculators/jetlag/">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light">
+
+  <title>Jet Lag Clock — The Longevity Initiative</title>
+
+  <link rel="stylesheet" href="../../shared/embed.css">
+  <link rel="stylesheet" href="jetlag.css">
+  <script src="jetlag.js"></script>
+</head>
+<body>
+  <h1 id="pageTitle">Jet Lag Clock</h1>
+  <p id="pageTagline">Get over jet lag faster with timed light exposure, backed by circadian science.</p>
+
+  <div class="controls" id="controlsPanel">
+    <noscript>This calculator requires JavaScript to run.</noscript>
+  </div>
+
+  <div id="statusMsg" class="status-msg status-same" style="display: none;"></div>
+
+  <div class="results" id="resultsSection" style="display: none;">
+    <div class="clock-col">
+      <svg id="clock" viewBox="0 0 280 280" width="280" height="280" role="img" aria-label="24-hour circadian strategy clock"></svg>
+      <div class="legend" id="legendSection"></div>
+    </div>
+
+    <div class="info-col">
+      <div class="instructions" id="instructions"></div>
+    </div>
+  </div>
+
+  <p class="embed-link">Find out more at <a href="https://thelongevityinitiative.org/calculators/jetlag/">The Longevity Initiative</a>.</p>
+
+  <!-- Embed support: theme, height resize, config -->
+  <script>
+    (function() {
+      window.embedConfig = Object.fromEntries
+        ? Object.fromEntries(new URLSearchParams(window.location.search))
+        : {};
+
+      var theme = window.embedConfig.theme || 'light';
+      if (theme === 'dark' || theme === 'auto') {
+        document.documentElement.classList.add('theme-' + theme);
+      }
+      var colorScheme = document.querySelector('meta[name="color-scheme"]');
+      if (colorScheme) {
+        if (theme === 'dark') colorScheme.content = 'dark';
+        else if (theme === 'auto') colorScheme.content = 'light dark';
+        else colorScheme.content = 'light';
+      }
+
+      if (window.embedConfig.source === 'li') {
+        document.addEventListener('DOMContentLoaded', function() {
+          var link = document.querySelector('.embed-link');
+          if (link) link.style.display = 'none';
+        });
+      }
+
+      function notifyParentOfHeight() {
+        window.parent.postMessage(
+          { type: 'li-calculator-resize', height: document.documentElement.scrollHeight },
+          '*'
+        );
+      }
+      if (window.ResizeObserver) {
+        new ResizeObserver(notifyParentOfHeight).observe(document.documentElement);
+      }
+      window.addEventListener('resize', notifyParentOfHeight);
+      document.addEventListener('DOMContentLoaded', notifyParentOfHeight);
+    })();
+  </script>
+</body>
+</html>
