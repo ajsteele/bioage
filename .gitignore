@@ -1,0 +1,7 @@
+# Ignore R history and workspace files
+.Rhistory
+.RData
+.Ruserdata
+
+# Ignore all HTML files within the 'analysis' folder
+analysis/*.html

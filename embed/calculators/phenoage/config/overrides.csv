@@ -1,0 +1,3 @@
+test_id,field,value,reason
+crp,plausible_low,0,hsCRP assays report values 0.1-3 mg/L; setting floor at 0 in case user gets 'undetected' and interprets as 0 (value has a floor in PhenoAge anyway)
+crp,normal_low,0,hsCRP assays report values 0.1-3 mg/L; setting floor at 0 in case user gets 'undetected' and interprets as 0 (value has a floor in PhenoAge anyway)

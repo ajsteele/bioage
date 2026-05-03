@@ -1,0 +1,27 @@
+{
+  "id": "phenoage",
+  "name": "PhenoAge",
+  "reference": "Levine ME et al. An epigenetic biomarker of aging for lifespan and healthspan. Aging. 2018;10(4):573-591.",
+  "reference_url": "https://www.aging-us.com/article/101414/text",
+  "formula": "mortality_model",
+  "constants": {
+    "intercept": -19.9067,
+    "gamma": 0.0076927,
+    "tmonths": 120,
+    "phenoage_intercept": 141.50225,
+    "phenoage_log_coeff": -0.00553,
+    "phenoage_divisor": 0.090165
+  },
+  "biomarkers": [
+    { "test_id": "age", "unit": "years", "coefficient": 0.0804 },
+    { "test_id": "albumin", "unit": "g/L", "coefficient": -0.0336 },
+    { "test_id": "creatinine", "unit": "µmol/L", "coefficient": 0.0095 },
+    { "test_id": "glucose", "unit": "mmol/L", "coefficient": 0.1953 },
+    { "test_id": "crp", "unit": "mg/dL", "coefficient": 0.0954, "transform": "log", "transform_floor": 0.22 },
+    { "test_id": "wbc", "unit": "1000 cells/µL", "coefficient": 0.0554 },
+    { "test_id": "lymphocyte", "unit": "%", "coefficient": -0.012, "transform": "percentage_of:wbc" },
+    { "test_id": "mcv", "unit": "fL", "coefficient": 0.0268 },
+    { "test_id": "rcdw", "unit": "%", "coefficient": 0.3306 },
+    { "test_id": "ap", "unit": "U/L", "coefficient": 0.0019 }
+  ]
+}

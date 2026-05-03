@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embed a calculator — The Longevity Initiative</title>
+  <link rel="stylesheet" href="shared/fonts/inter.css">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2em 1em;
+      color: #333;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.8em; margin-bottom: 0.3em; }
+    h2 { font-size: 1.3em; margin-top: 1.5em; }
+    p { margin: 0.5em 0; }
+
+    .calculator-select {
+      font-size: 1em;
+      padding: 0.4em 0.8em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+
+    .snippet-container {
+      position: relative;
+      margin: 1em 0;
+    }
+    .snippet-code {
+      display: block;
+      width: 100%;
+      min-height: 200px;
+      padding: 1em;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.8em;
+      line-height: 1.5;
+      color: #1a1a2e;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      resize: vertical;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.5em;
+      right: 0.5em;
+      padding: 0.3em 0.8em;
+      font-size: 0.85em;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .copy-btn:hover { background: #e0e0e0; }
+
+    .preview-frame {
+      width: 100%;
+      max-width: 800px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 1em 0;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.5em 1em;
+      align-items: center;
+      margin: 1em 0;
+    }
+    .options-grid label {
+      font-weight: 500;
+      font-size: 0.9em;
+    }
+    .options-grid select,
+    .options-grid input {
+      font-size: 0.9em;
+      padding: 0.3em 0.6em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+
+    .note {
+      font-size: 0.85em;
+      color: #666;
+      margin: 0.5em 0;
+    }
+
+    footer {
+      margin-top: 3em;
+      padding-top: 1em;
+      border-top: 1px solid #ddd;
+      font-size: 0.85em;
+      color: #888;
+    }
+    footer a { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Embed a calculator</h1>
+  <p>Add one of our biological age calculators to your website. The calculator runs entirely in the visitor's browser — no data is sent to any server.</p>
+
+  <h2>1. Choose a calculator</h2>
+  <select id="calculatorSelect" class="calculator-select" onchange="updateEmbed()">
+    <option value="phenoage" data-name="PhenoAge biological age calculator" data-path="calculators/phenoage/">PhenoAge — biological age from blood biomarkers</option>
+    <option value="dogyears" data-name="Dog age calculator" data-path="calculators/dogyears/">Dog years — epigenetic dog-to-human age</option>
+    <option value="jetlag" data-name="Jet lag clock" data-path="calculators/jetlag/">Jet lag clock — circadian light-exposure timing</option>
+  </select>
+
+  <h2>2. Options</h2>
+  <div class="options-grid">
+    <label for="optTheme">Theme</label>
+    <select id="optTheme" onchange="updateEmbed()">
+      <option value="light">Light (default)</option>
+      <option value="dark">Dark</option>
+      <option value="auto">Auto (follows user's OS setting)</option>
+    </select>
+
+    <label for="optMaxWidth">Max width</label>
+    <input type="text" id="optMaxWidth" value="800px" oninput="updateEmbed()">
+  </div>
+
+  <h2>3. Preview</h2>
+  <iframe id="previewFrame" class="preview-frame" frameborder="0" scrolling="no" height="600" title="Calculator preview"></iframe>
+
+  <h2>4. Copy the embed code</h2>
+  <div class="snippet-container">
+    <textarea id="embedCode" class="snippet-code" readonly></textarea>
+    <button class="copy-btn" id="copyBtn" onclick="copySnippet()">Copy</button>
+  </div>
+  <p class="note">Paste this into your site's HTML where you want the calculator to appear. The iframe resizes automatically to fit its content.</p>
+
+  <footer>
+    <a href="https://thelongevityinitiative.org">The Longevity Initiative</a> · <a href="https://github.com/ajsteele/bioage">Source code on GitHub</a>
+  </footer>
+
+  <script>
+    var EMBED_ORIGIN = 'https://thelongevityinitiative.org';
+    var EMBED_BASE = EMBED_ORIGIN + '/embed/';
+
+    // Pre-select calculator from URL hash (e.g. /embed/#calculators/phenoage)
+    function preselectFromHash() {
+      var hash = window.location.hash.replace(/^#\/?/, '');
+      if (!hash) return;
+      var select = document.getElementById('calculatorSelect');
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].getAttribute('data-path').indexOf(hash) !== -1) {
+          select.selectedIndex = i;
+          break;
+        }
+      }
+    }
+
+    function getSelectedCalculator() {
+      var select = document.getElementById('calculatorSelect');
+      var opt = select.options[select.selectedIndex];
+      return {
+        id: opt.value,
+        name: opt.getAttribute('data-name'),
+        path: opt.getAttribute('data-path')
+      };
+    }
+
+    function getThemeParam() {
+      var theme = document.getElementById('optTheme').value;
+      return theme === 'light' ? '' : '?theme=' + theme;
+    }
+
+    function buildEmbedUrl(calc) {
+      // For local development, use relative path; for production, use full URL
+      var isLocal = window.location.protocol === 'file:' ||
+                    window.location.hostname === 'localhost' ||
+                    window.location.hostname === '127.0.0.1';
+      var base = isLocal ? calc.path : EMBED_BASE + calc.path;
+      return base + getThemeParam();
+    }
+
+    function generateSnippet(calc) {
+      var maxWidth = document.getElementById('optMaxWidth').value || '800px';
+      var embedUrl = EMBED_BASE + calc.path + getThemeParam();
+      var iframeId = 'li-calc-' + calc.id;
+
+      return '<!-- ' + calc.name + ' by The Longevity Initiative -->\n' +
+        '<iframe\n' +
+        '  id="' + iframeId + '"\n' +
+        '  src="' + embedUrl + '"\n' +
+        '  width="100%"\n' +
+        '  height="600"\n' +
+        '  frameborder="0"\n' +
+        '  sandbox="allow-scripts allow-same-origin allow-popups allow-downloads"\n' +
+        '  allow="web-share; clipboard-write"\n' +
+        '  style="border:none; display:block; width:100%; max-width:' + maxWidth + '; margin:0 auto; overflow:hidden;"\n' +
+        '  title="' + calc.name + ' — The Longevity Initiative"\n' +
+        '  loading="lazy"\n' +
+        '></iframe>\n' +
+        '<a href="https://thelongevityinitiative.org/calculators/' + calc.path + '/" style="font-size: 0.75em">' + calc.name +' calculator by The Longevity Initiative</a>' +
+        '<script>\n' +
+        '  window.addEventListener(\'message\', function(e) {\n' +
+        '    if (\n' +
+        '      e.origin === \'' + EMBED_ORIGIN + '\' &&\n' +
+        '      e.data &&\n' +
+        '      e.data.type === \'li-calculator-resize\'\n' +
+        '    ) {\n' +
+        '      var iframe = document.getElementById(\'' + iframeId + '\');\n' +
+        '      if (iframe && iframe.contentWindow === e.source) {\n' +
+        '        iframe.style.height = (e.data.height + 32) + \'px\';\n' +
+        '      }\n' +
+        '    }\n' +
+        '  });\n' +
+        '<\/script>\n' +
+        '<!-- / end of ' + calc.name + ' calculator code -->';
+    }
+
+    function updateEmbed() {
+      var calc = getSelectedCalculator();
+      var snippet = generateSnippet(calc);
+      document.getElementById('embedCode').value = snippet;
+
+      // Update preview
+      var frame = document.getElementById('previewFrame');
+      var previewUrl = buildEmbedUrl(calc);
+      if (frame.src !== previewUrl) {
+        frame.src = previewUrl;
+      }
+    }
+
+    function copySnippet() {
+      var code = document.getElementById('embedCode');
+      code.select();
+      code.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(code.value).then(function() {
+        var btn = document.getElementById('copyBtn');
+        var original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = original; }, 2000);
+      });
+    }
+
+    // Listen for resize messages from the preview iframe
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'li-calculator-resize') {
+        var frame = document.getElementById('previewFrame');
+        if (frame) frame.style.height = (e.data.height + 32) + 'px';
+      }
+    });
+
+    // Initialise
+    preselectFromHash();
+    window.addEventListener('hashchange', function() {
+      preselectFromHash();
+      updateEmbed();
+    });
+    updateEmbed();
+  </script>
+</body>
+</html>
