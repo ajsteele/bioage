@@ -5,8 +5,11 @@
   "label_test_date": "Test date",
 
   "dob_prompt": "Please enter your date of birth above to get started.",
-  "dob_prompt_error": "Please enter your date of birth{0} to calculate your biological age.",
-  "dob_prompt_error_and_test_date": " and test date",
+  "dob_prompt_testdate": "Please enter the date of your test above to get started.",
+  "dob_prompt_both": "Please enter your date of birth and test date above to get started.",
+  "dob_prompt_error_dob": "Please enter your date of birth to calculate your biological age.",
+  "dob_prompt_error_testdate": "Please enter your test date to calculate your biological age.",
+  "dob_prompt_error_both": "Please enter your date of birth and test date to calculate your biological age.",
 
   "legacy_note": "Your test results were loaded from an older version of this calculator which stored your age directly. Please enter your date of birth and the date of the test so we can calculate your age more accurately.",
 

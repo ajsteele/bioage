@@ -470,17 +470,25 @@ function calculateResult() {
   var hasDates = dobVal && testdateVal;
 
   if (!hasDates) {
-    // Show DOB prompt — escalate to error style if all biomarker values are filled
+    // Show DOB prompt — escalate to error style if all biomarker values are filled.
+    // Wording adapts to which date(s) are missing.
     if (dobPrompt) {
       dobPrompt.style.display = '';
+      var missingDob = !dobVal;
+      var missingTest = !testdateVal;
+      var promptKey;
       if (allFilled) {
+        promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
+          : missingDob ? 'dob_prompt_error_dob'
+          : 'dob_prompt_error_testdate';
         dobPrompt.className = 'dob-prompt dob-prompt-error';
-        dobPrompt.textContent = t('dob_prompt_error',
-          !testdateVal ? t('dob_prompt_error_and_test_date') : '');
       } else {
+        promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
+          : missingDob ? 'dob_prompt'
+          : 'dob_prompt_testdate';
         dobPrompt.className = 'dob-prompt';
-        dobPrompt.textContent = t('dob_prompt');
       }
+      dobPrompt.textContent = t(promptKey);
     }
     if (!allFilled) {
       warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
@@ -983,6 +991,7 @@ function createFormElements() {
   var dobInput = document.createElement('input');
   dobInput.setAttribute('type', 'date');
   dobInput.setAttribute('id', 'dob');
+  dobInput.setAttribute('max', getTodayString());
   dobInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
   if (saved && saved.dob) dobInput.value = saved.dob;
   dobRow.appendChild(dobLabel);
@@ -1003,7 +1012,8 @@ function createFormElements() {
   var testdateInput = document.createElement('input');
   testdateInput.setAttribute('type', 'date');
   testdateInput.setAttribute('id', 'testdate');
-  testdateInput.setAttribute('oninput', 'calculateResult()');
+  testdateInput.setAttribute('max', getTodayString());
+  testdateInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
   if (saved && saved.testdate) {
     testdateInput.value = saved.testdate;
   } else {
@@ -1153,13 +1163,19 @@ function updateDobPrompt() {
   var prompt = document.getElementById('dobPrompt');
   if (!prompt) return;
   var dobVal = document.getElementById('dob').value;
-  if (dobVal) {
+  var testdateVal = document.getElementById('testdate').value;
+  if (dobVal && testdateVal) {
     prompt.style.display = 'none';
-  } else {
-    prompt.style.display = '';
-    prompt.className = 'dob-prompt';
-    prompt.textContent = t('dob_prompt');
+    return;
   }
+  prompt.style.display = '';
+  prompt.className = 'dob-prompt';
+  var missingDob = !dobVal;
+  var missingTest = !testdateVal;
+  var key = (missingDob && missingTest) ? 'dob_prompt_both'
+    : missingDob ? 'dob_prompt'
+    : 'dob_prompt_testdate';
+  prompt.textContent = t(key);
 }
 
 function showDefaultsMessage(text, type) {
