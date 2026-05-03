@@ -67,7 +67,10 @@ function loadConfig() {
     // Parse tests
     testDefs = parseCSV(testsCSV);
 
-    // Parse conversions into a lookup: {test_id: [{unit, to_canonical_factor}]}
+    // Parse conversions into a lookup: {test_id: [{unit, to_canonical_factor, transform}]}
+    // The optional `transform` column allows units that depend on another test
+    // (e.g. lymphocytes given as an absolute count, which only converts to a
+    // percentage given the WBC count).
     conversions = {};
     var convRows = parseCSV(conversionsCSV);
     for (var i = 0; i < convRows.length; i++) {
@@ -77,7 +80,8 @@ function loadConfig() {
       }
       conversions[row.test_id].push({
         unit: row.unit,
-        to_canonical_factor: parseFloat(row.to_canonical_factor)
+        to_canonical_factor: parseFloat(row.to_canonical_factor),
+        transform: row.transform || ''
       });
     }
 
@@ -110,11 +114,9 @@ function buildFormTests() {
     var testConversions = conversions[bm.test_id];
 
     var units = [];
-    var factors = [];
     if (testConversions) {
       for (var j = 0; j < testConversions.length; j++) {
         units.push(testConversions[j].unit);
-        factors.push(testConversions[j].to_canonical_factor);
       }
     }
 
@@ -122,7 +124,6 @@ function buildFormTests() {
       id: bm.test_id,
       name: testDef ? testDef.name : bm.test_id,
       units: units,
-      to_canonical_factors: factors,
       normal_low: testDef && testDef.normal_low !== '' ? parseFloat(testDef.normal_low) : null,
       normal_high: testDef && testDef.normal_high !== '' ? parseFloat(testDef.normal_high) : null,
       plausible_low: testDef && testDef.plausible_low !== '' ? parseFloat(testDef.plausible_low) : null,
@@ -178,25 +179,51 @@ function getDefaultForAge(age, test_id) {
 
 // --- Unit conversion engine ---
 
-function toCanonical(value, unit, test_id) {
+// Convert a raw user-entered value to its canonical unit.
+//   context (optional): a {test_id: canonicalValue} map providing reference
+//   values for transforms like `percentage_of:X`. Returns null when a needed
+//   reference value is missing or non-positive.
+function toCanonical(value, unit, test_id, context) {
   var testConvs = conversions[test_id];
   if (!testConvs) return value;
   for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit === unit) {
-      return value * testConvs[i].to_canonical_factor;
+    if (testConvs[i].unit !== unit) continue;
+    var factor = testConvs[i].to_canonical_factor;
+    var transform = testConvs[i].transform;
+    if (!transform) return value * factor;
+    if (transform.indexOf('percentage_of:') === 0) {
+      // value*factor is a count in the same scale as the reference's canonical
+      // (e.g. for lymphocyte: 10⁹ cells/L, matching wbc canonical).
+      var refId = transform.substring('percentage_of:'.length);
+      var refVal = context && context[refId];
+      if (refVal == null || refVal <= 0) return null;
+      return (value * factor) / refVal * 100;
     }
+    console.warn('Unknown unit transform: ' + transform);
+    return value * factor;
   }
   console.warn('No conversion found for ' + test_id + ' unit ' + unit);
   return value;
 }
 
-function fromCanonical(value, targetUnit, test_id) {
+// Inverse of toCanonical: render a canonical value in `targetUnit`. Same
+// context contract — returns null if a needed reference is unavailable.
+function fromCanonical(value, targetUnit, test_id, context) {
   var testConvs = conversions[test_id];
   if (!testConvs) return value;
   for (var i = 0; i < testConvs.length; i++) {
-    if (testConvs[i].unit === targetUnit) {
-      return value / testConvs[i].to_canonical_factor;
+    if (testConvs[i].unit !== targetUnit) continue;
+    var factor = testConvs[i].to_canonical_factor;
+    var transform = testConvs[i].transform;
+    if (!transform) return value / factor;
+    if (transform.indexOf('percentage_of:') === 0) {
+      var refId = transform.substring('percentage_of:'.length);
+      var refVal = context && context[refId];
+      if (refVal == null || refVal <= 0) return null;
+      // canonical value is a percentage of refVal; convert back to absolute count.
+      return (value / 100 * refVal) / factor;
     }
+    return value / factor;
   }
   console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
   return value;
@@ -215,15 +242,9 @@ function applyTransform(value, transform, refValues, transformFloor) {
     return Math.log(value);
   }
 
-  if (transform.indexOf('percentage_of:') === 0) {
-    var refTestId = transform.split(':')[1];
-    var refValue = refValues[refTestId];
-    if (refValue && refValue !== 0) {
-      return (value / refValue) * 100;
-    }
-    return value;
-  }
-
+  // Cross-test transforms like `percentage_of:wbc` are now handled at the
+  // unit-conversion layer (toCanonical/fromCanonical), so they shouldn't
+  // appear here. Warn if one slips through.
   console.warn('Unknown transform: ' + transform);
   return value;
 }
@@ -361,10 +382,13 @@ function checkRange(canonicalValue, formTest) {
   return 'ok';
 }
 
-// Format a canonical range value in the user's selected display unit
-function formatRangeInUnit(canonicalValue, unitIndex, formTest) {
-  var factor = formTest.to_canonical_factors[unitIndex];
-  var displayVal = canonicalValue / factor;
+// Format a canonical range value in the user's selected display unit.
+// Uses fromCanonical so transform-based units (e.g. lymphocyte absolute
+// counts) render correctly when the relevant context is supplied.
+function formatRangeInUnit(canonicalValue, unitIndex, formTest, context) {
+  var unit = formTest.units[unitIndex];
+  var displayVal = fromCanonical(canonicalValue, unit, formTest.id, context);
+  if (displayVal == null || isNaN(displayVal)) return '?';
   // Use sensible precision: more decimals for small numbers
   if (displayVal < 0.1) return displayVal.toPrecision(2);
   if (displayVal < 10) return displayVal.toFixed(2);
@@ -421,6 +445,7 @@ function calculateResult() {
   var selectedUnits = [];
   var implausibleNames = [];
 
+  // Pass 1: read raw inputs and validate parseability + positivity.
   for (var i = 0; i < formTests.length; i++) {
     var valueElement = document.getElementById(formTests[i].id);
     var unitsElement = document.getElementById(formTests[i].id + 'Unit');
@@ -430,46 +455,66 @@ function calculateResult() {
     if (isNaN(rawValues[i]) && valueElement.value !== '') {
       markInputError(formTests[i].id);
       errors.push(t('error_invalid_value', formTests[i].name));
-    } else if (isNaN(rawValues[i])) {
-      // Missing value — not an error per se, just incomplete
-    } else {
+    } else if (!isNaN(rawValues[i])) {
       // Reject zero/negative — but skip if plausible_low allows zero (e.g. CRP "not detectable")
       if (rawValues[i] <= 0 && !(formTests[i].plausible_low !== null && formTests[i].plausible_low <= 0)) {
         markInputError(formTests[i].id, t('error_must_be_positive'));
         errors.push(t('error_positive_detail', formTests[i].name));
       }
+    }
+  }
 
-      // Range validation: convert to canonical, check against ranges
-      var canonVal = toCanonical(rawValues[i], selectedUnits[i], formTests[i].id);
-      var rangeStatus = checkRange(canonVal, formTests[i]);
-      var unitIdx = formTests[i].units.indexOf(selectedUnits[i]);
-      if (rangeStatus === 'error') {
-        var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i]);
-        var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i]);
-        // Check if the raw value would be plausible in a different unit
-        var suggestedUnit = null;
-        if (formTests[i].units.length > 1) {
-          for (var u = 0; u < formTests[i].units.length; u++) {
-            if (u === unitIdx) continue;
-            var altCanon = rawValues[i] * formTests[i].to_canonical_factors[u];
-            if (checkRange(altCanon, formTests[i]) !== 'error') {
-              suggestedUnit = formTests[i].units[u];
-              break;
-            }
+  // Pass 2: convert to canonical in form order, building up a context so
+  // dependent conversions (e.g. lymphocyte-as-absolute-count needs wbc) can
+  // resolve. Form order matches model.biomarkers order, which puts referenced
+  // tests before their dependants.
+  var canonicalContext = {};
+  var canonicalByIndex = [];
+  for (var i = 0; i < formTests.length; i++) {
+    if (isNaN(rawValues[i])) { canonicalByIndex[i] = NaN; continue; }
+    var canon = toCanonical(rawValues[i], selectedUnits[i], formTests[i].id, canonicalContext);
+    canonicalByIndex[i] = canon;
+    if (canon != null && !isNaN(canon)) {
+      canonicalContext[formTests[i].id] = canon;
+    }
+  }
+
+  // Pass 3: range checks against canonical values. Skip when a dependent
+  // conversion couldn't resolve yet (e.g. lymphocyte abs without wbc).
+  for (var i = 0; i < formTests.length; i++) {
+    if (isNaN(rawValues[i])) continue;
+    var canonVal = canonicalByIndex[i];
+    if (canonVal == null || isNaN(canonVal)) continue;
+
+    var rangeStatus = checkRange(canonVal, formTests[i]);
+    var unitIdx = formTests[i].units.indexOf(selectedUnits[i]);
+    if (rangeStatus === 'error') {
+      var pLow = formatRangeInUnit(formTests[i].plausible_low, unitIdx, formTests[i], canonicalContext);
+      var pHigh = formatRangeInUnit(formTests[i].plausible_high, unitIdx, formTests[i], canonicalContext);
+      // Check if the raw value would be plausible in a different unit
+      var suggestedUnit = null;
+      if (formTests[i].units.length > 1) {
+        for (var u = 0; u < formTests[i].units.length; u++) {
+          if (u === unitIdx) continue;
+          var altCanon = toCanonical(rawValues[i], formTests[i].units[u], formTests[i].id, canonicalContext);
+          if (altCanon != null && !isNaN(altCanon) &&
+              checkRange(altCanon, formTests[i]) !== 'error') {
+            suggestedUnit = formTests[i].units[u];
+            break;
           }
         }
-        var msg = t('range_implausible', selectedUnits[i], pLow, pHigh);
-        if (suggestedUnit) {
-          msg += ' ' + t('range_suggest_unit', suggestedUnit);
-        }
-        showRangeAlert(formTests[i].id, 'error', msg);
-        implausibleNames.push(formTests[i].name);
-      } else if (rangeStatus === 'warning') {
-        var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i]);
-        var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i]);
-        showRangeAlert(formTests[i].id, 'warning',
-          t('range_warning', nLow, nHigh, selectedUnits[i]));
       }
+      var msg = t('range_implausible', selectedUnits[i], pLow, pHigh);
+      if (suggestedUnit) {
+        msg += ' ' + t('range_suggest_unit', suggestedUnit);
+      }
+      showRangeAlert(formTests[i].id, 'error', msg);
+      implausibleNames.push(formTests[i].name);
+    } else if (rangeStatus === 'warning') {
+      var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i], canonicalContext);
+      var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i], canonicalContext);
+      showRangeAlert(formTests[i].id, 'warning',
+        t('range_warning', nLow, nHigh, selectedUnits[i]));
     }
   }
 
@@ -574,12 +619,13 @@ function calculateResult() {
     return;
   }
 
-  // Convert all values to canonical (SI) units
-  var canonicalValues = {};
-  canonicalValues['age'] = age;
+  // Convert all values to canonical (SI) units. We rebuild rather than reuse
+  // canonicalContext above so that fillMissingWithDefaults paths and re-entry
+  // are robust, and so this stage uses the now-known full input set.
+  var canonicalValues = { age: age };
   for (var i = 0; i < formTests.length; i++) {
     var testId = formTests[i].id;
-    canonicalValues[testId] = toCanonical(rawValues[i], selectedUnits[i], testId);
+    canonicalValues[testId] = toCanonical(rawValues[i], selectedUnits[i], testId, canonicalValues);
   }
 
   // Compute the weighted sum using model coefficients
@@ -588,35 +634,13 @@ function calculateResult() {
     var bm = model.biomarkers[i];
     var canonicalVal = canonicalValues[bm.test_id];
 
-    // Convert from canonical to the unit the model coefficient expects
-    var modelVal;
-    if (bm.test_id === 'age') {
-      modelVal = canonicalVal;
-    } else {
-      modelVal = fromCanonical(canonicalVal, bm.unit, bm.test_id);
-    }
-
-    // Handle transforms
-    var modelRefValues = {};
-    if (bm.transform && bm.transform.indexOf('percentage_of:') === 0) {
-      var refId = bm.transform.split(':')[1];
-      var refBm = null;
-      for (var j = 0; j < model.biomarkers.length; j++) {
-        if (model.biomarkers[j].test_id === refId) { refBm = model.biomarkers[j]; break; }
-      }
-      // Find which form index corresponds to this biomarker
-      var formIdx = -1;
-      for (var j = 0; j < formTests.length; j++) {
-        if (formTests[j].id === bm.test_id) { formIdx = j; break; }
-      }
-      if (refBm && formIdx >= 0 && selectedUnits[formIdx] !== '%') {
-        var refModelVal = fromCanonical(canonicalValues[refId], refBm.unit, refId);
-        modelRefValues[refId] = refModelVal;
-        modelVal = applyTransform(modelVal, bm.transform, modelRefValues, bm.transform_floor);
-      }
-    } else {
-      modelVal = applyTransform(modelVal, bm.transform, {}, bm.transform_floor);
-    }
+    // Convert from canonical to the unit the model coefficient expects.
+    // (Unit conversion handles cross-test transforms like percentage_of, so
+    // applyTransform here is only ever used for log/floor on a single value.)
+    var modelVal = (bm.test_id === 'age')
+      ? canonicalVal
+      : fromCanonical(canonicalVal, bm.unit, bm.test_id, canonicalValues);
+    modelVal = applyTransform(modelVal, bm.transform, canonicalValues, bm.transform_floor);
 
     rollingTotal += modelVal * bm.coefficient;
   }
@@ -1265,6 +1289,22 @@ function fillMissingWithDefaults() {
   var age = calculateAge(dob, testDate);
   var filled = 0;
 
+  // Build a canonical context as we go: existing user values first, then each
+  // newly filled default. This means a lymphocyte input with an absolute-count
+  // unit selected can convert from its canonical % default once wbc has been
+  // filled (form order puts wbc first).
+  var ctx = { age: age };
+  for (var i = 0; i < formTests.length; i++) {
+    var existingInput = document.getElementById(formTests[i].id);
+    var existingUnitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var existingVal = parseInput(existingInput.value);
+    if (!isNaN(existingVal)) {
+      var existingUnit = existingUnitSelect.options[existingUnitSelect.selectedIndex].text;
+      var existingCanon = toCanonical(existingVal, existingUnit, formTests[i].id, ctx);
+      if (existingCanon != null && !isNaN(existingCanon)) ctx[formTests[i].id] = existingCanon;
+    }
+  }
+
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
     if (input.value !== '') continue; // don't overwrite user values
@@ -1275,7 +1315,8 @@ function fillMissingWithDefaults() {
     // Convert from canonical to the currently selected display unit
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
     var selectedUnit = unitSelect.options[unitSelect.selectedIndex].text;
-    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id);
+    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id, ctx);
+    if (displayVal == null || isNaN(displayVal)) continue; // missing dependency
 
     // Use sensible precision
     var rounded;
@@ -1286,6 +1327,7 @@ function fillMissingWithDefaults() {
 
     input.value = rounded;
     input.classList.add('default-value');
+    ctx[formTests[i].id] = canonicalDefault;
     filled++;
   }
 
