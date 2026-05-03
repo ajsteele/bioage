@@ -29,12 +29,14 @@ function t(key) {
 
 // --- Config loading ---
 
+// Split a single CSV line, respecting quoted fields (commas inside quotes are
+// preserved as part of the field).
+function splitCSVLine(line) {
+  return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+}
+
 function parseCSV(text) {
   var lines = text.trim().split('\n');
-  // Split respecting quoted fields (commas inside quotes are preserved)
-  function splitCSVLine(line) {
-    return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-  }
   var headers = splitCSVLine(lines[0]).map(function(h) {
     return h.trim().replace(/^"|"$/g, '');
   });
@@ -260,21 +262,26 @@ function extractValuesFromAnchor(url) {
   var result = { dob: null, testdate: null, tests: [], isLegacy: false };
 
   for (var i = 0; i < parts.length; i++) {
-    var keyVal = parts[i].split(/[=,]/);
-    var key = decodeURIComponent(keyVal[0]);
+    var eqIdx = parts[i].indexOf('=');
+    if (eqIdx === -1) continue;
+    var key = decodeURIComponent(parts[i].substring(0, eqIdx));
+    var rest = parts[i].substring(eqIdx + 1);
 
     if (key === 'dob') {
-      result.dob = decodeURIComponent(keyVal[1]);
+      result.dob = decodeURIComponent(rest);
     } else if (key === 'testdate') {
-      result.testdate = decodeURIComponent(keyVal[1]);
+      result.testdate = decodeURIComponent(rest);
     } else if (key === 'age') {
       // Old-format URL had age as a direct value; new format computes it from DOB + test date.
       result.isLegacy = true;
     } else {
+      var commaIdx = rest.indexOf(anchorUnitsSeparator);
+      var rawValue = commaIdx === -1 ? rest : rest.substring(0, commaIdx);
+      var rawUnits = commaIdx === -1 ? '' : rest.substring(commaIdx + 1);
       result.tests.push({
         id: key,
-        value: decodeURIComponent(keyVal[1]),
-        units: decodeURIComponent(keyVal[2])
+        value: decodeURIComponent(rawValue),
+        units: decodeURIComponent(rawUnits)
       });
     }
   }
@@ -322,6 +329,8 @@ function clearInputErrors() {
   var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
   for (var i = 0; i < errors.length; i++) {
     errors[i].classList.remove('errorNaN', 'input-error', 'input-warning');
+    errors[i].removeAttribute('aria-describedby');
+    errors[i].removeAttribute('aria-invalid');
   }
   var msgs = document.querySelectorAll('.error-message, .range-alert');
   for (var i = 0; i < msgs.length; i++) {
@@ -378,25 +387,28 @@ function showRangeAlert(elementId, level, message) {
   var el = document.getElementById(elementId);
   if (!el) return;
   el.classList.add(level === 'error' ? 'input-error' : 'input-warning');
+  if (level === 'error') el.setAttribute('aria-invalid', 'true');
   var row = el.closest('tr');
   if (row) {
+    var alertId = elementId + '-alert';
     var alert = document.createElement('tr');
     alert.className = 'range-alert';
     var td = document.createElement('td');
     td.setAttribute('colspan', '3');
     var p = document.createElement('p');
+    p.id = alertId;
     p.className = level === 'error' ? 'input-alert input-alert-error' : 'input-alert';
     p.textContent = message;
     td.appendChild(p);
     alert.appendChild(td);
     row.parentNode.insertBefore(alert, row.nextSibling);
+    el.setAttribute('aria-describedby', alertId);
   }
 }
 
 // --- Main calculation triggered by form input ---
 
 function calculateResult() {
-  console.log('### Calculating! ###');
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
   var warningsDiv = document.getElementById('resultWarnings');
@@ -517,6 +529,9 @@ function calculateResult() {
 
   // Hide DOB prompt once dates are present
   if (dobPrompt) dobPrompt.style.display = 'none';
+  // The legacy-URL note nudges users to enter DOB; once they have, drop it.
+  var legacyNote = document.querySelector('.legacy-note');
+  if (legacyNote) legacyNote.remove();
 
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
@@ -602,11 +617,6 @@ function calculateResult() {
     } else {
       modelVal = applyTransform(modelVal, bm.transform, {}, bm.transform_floor);
     }
-
-    console.log(bm.test_id + ': ' +
-      (bm.test_id === 'age' ? age.toFixed(2) + ' years' : rawValues[formTests.findIndex(function(t) { return t.id === bm.test_id; })] + ' ' + selectedUnits[formTests.findIndex(function(t) { return t.id === bm.test_id; })]) +
-      ' → model (' + bm.unit + ') ' + modelVal +
-      ' × ' + bm.coefficient + ' = ' + (modelVal * bm.coefficient));
 
     rollingTotal += modelVal * bm.coefficient;
   }
@@ -964,14 +974,25 @@ function copyResultLink() {
   if (!input) return;
   input.select();
   input.setSelectionRange(0, 99999); // mobile
-  navigator.clipboard.writeText(input.value).then(function() {
-    var btn = input.nextElementSibling;
-    if (btn) {
-      var original = btn.textContent;
-      btn.textContent = t('save_copied');
-      setTimeout(function() { btn.textContent = original; }, 2000);
-    }
-  });
+
+  var btn = input.nextElementSibling;
+  function flashConfirm() {
+    if (!btn) return;
+    var original = btn.textContent;
+    btn.textContent = t('save_copied');
+    setTimeout(function() { btn.textContent = original; }, 2000);
+  }
+  function execCommandFallback() {
+    try {
+      if (document.execCommand('copy')) flashConfirm();
+    } catch (e) { /* nothing more to do */ }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(input.value).then(flashConfirm, execCommandFallback);
+  } else {
+    execCommandFallback();
+  }
 }
 
 function showBrowserSaveConfirm() {
@@ -1024,7 +1045,7 @@ function createFormElements() {
   dobRow.appendChild(dobInput);
   if (saved && saved.isLegacy) {
     var legacyNote = document.createElement('p');
-    legacyNote.className = 'input-alert';
+    legacyNote.className = 'input-alert legacy-note';
     legacyNote.textContent = t('legacy_note');
     dobRow.appendChild(legacyNote);
   }
@@ -1385,19 +1406,22 @@ function handleCSVUpload(fileInput) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var text = e.target.result;
-    // Strip UTF-8 BOM if present
+    // Strip UTF-8 BOM and normalise CRLF/CR line endings (Excel re-saves CSVs as CRLF).
     if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
-    var lines = text.trim().split('\n');
+    text = text.replace(/\r\n?/g, '\n');
+    var lines = text.split('\n');
     var loaded = 0;
+
+    var unquote = function(s) { return s.trim().replace(/^"|"$/g, ''); };
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (!line || line.charAt(0) === '#' || line.indexOf('field,') === 0) continue;
 
-      var parts = line.split(',');
-      var field = (parts[0] || '').trim();
-      var value = (parts[1] || '').trim();
-      var unit = (parts[2] || '').trim();
+      var parts = splitCSVLine(line);
+      var field = unquote(parts[0] || '');
+      var value = unquote(parts[1] || '');
+      var unit = unquote(parts[2] || '');
 
       if (!field || !value) continue;
 

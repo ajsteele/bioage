@@ -237,12 +237,20 @@
       var code = document.getElementById('embedCode');
       code.select();
       code.setSelectionRange(0, 99999);
-      navigator.clipboard.writeText(code.value).then(function() {
-        var btn = document.getElementById('copyBtn');
+      var btn = document.getElementById('copyBtn');
+      function flash() {
         var original = btn.textContent;
         btn.textContent = 'Copied!';
         setTimeout(function() { btn.textContent = original; }, 2000);
-      });
+      }
+      function fallback() {
+        try { if (document.execCommand('copy')) flash(); } catch (e) {}
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code.value).then(flash, fallback);
+      } else {
+        fallback();
+      }
     }
 
     // Listen for resize messages from the preview iframe
