@@ -674,10 +674,18 @@ function calculateResult() {
       warningText + '</div>';
   }
 
-  // 3. Descriptive summary text (below the share buttons)
-  var riskPct = formatSigFigs(riskOfDeath * 100, 2);
+  // 3. Descriptive summary text (below the share buttons).
+  // Use a dedicated "less than 0.1%" phrasing for tiny risks — otherwise a
+  // healthy 30-year-old sees something like "0.0050%" which reads as noise.
   var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
-  summaryEl.textContent = t('result_summary', age.toFixed(1), phenoAge.toFixed(2), riskPct, oneInN);
+  if (riskOfDeath * 100 < 0.1) {
+    summaryEl.textContent = t('result_summary_low_risk',
+      age.toFixed(1), phenoAge.toFixed(1), oneInN);
+  } else {
+    var riskPct = formatSigFigs(riskOfDeath * 100, 2);
+    summaryEl.textContent = t('result_summary',
+      age.toFixed(1), phenoAge.toFixed(1), riskPct, oneInN);
+  }
 
   // 4. Save your result — in its own div below the share card
   if (saveSection) saveSection.style.display = '';
@@ -728,6 +736,10 @@ function generateShareCard(bioAge, chronAge, acceleration) {
   // Update button text from strings
   var downloadBtn = document.getElementById('downloadImageBtn');
   if (downloadBtn) downloadBtn.textContent = t('share_download_image');
+
+  // Reassuring note that the image doesn't include the user's blood values
+  var imageNote = document.getElementById('shareImageNote');
+  if (imageNote) imageNote.textContent = t('share_image_note');
 
   // Build the HTML card
   container.innerHTML = generateResultCardHTML(
