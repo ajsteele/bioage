@@ -183,13 +183,13 @@ a {
   margin: 0.5em 0;
 }
 
-.bioageform tbody tr > th,
-.bioageform tbody tr > td {
+.bioageform th,
+.bioageform td {
   padding: 4px 0;
   vertical-align: middle;
 }
 
-.bioageform tbody tr > th {
+.bioageform th {
   text-align: right;
   padding-right: 0.8em;
   font-weight: 500;
@@ -198,21 +198,21 @@ a {
   white-space: nowrap;
 }
 
-.bioageform tbody tr > th label {
+.bioageform th label {
   cursor: pointer;
 }
 
-.bioageform tbody tr > td:nth-of-type(1) input {
+.bioageform td:nth-of-type(1) input {
   width: 100%;
   box-sizing: border-box;
 }
 
-.bioageform tbody tr > td:nth-of-type(2) {
-  width: 8em;
+.bioageform td:nth-of-type(2) {
+  width: 9.5em;
   padding-left: 6px;
 }
 
-.bioageform tbody tr > td:nth-of-type(2) select {
+.bioageform td:nth-of-type(2) select {
   width: 100%;
   box-sizing: border-box;
 }
@@ -246,6 +246,15 @@ a {
 .date-row > label {
   font-weight: 500;
   min-width: 8em;
+}
+
+.age-readout {
+  font-size: 0.85em;
+  color: var(--calc-text-faint);
+}
+
+.age-readout:empty {
+  display: none;
 }
 
 .date-row input[type="date"] {
@@ -398,11 +407,18 @@ input[type="number"] {
   border-radius: 4px;
 }
 
-/* Severe result warning (many defaults / all defaults) */
-.result-warning-severe {
+/* Milder result warning (e.g. "very approximate" — a third of values are
+   defaults). Yellow rather than red since it's a heads-up, not an error. */
+.result-warning--mild {
   color: var(--calc-warning-text);
   background: var(--calc-warning-bg);
   border-color: var(--calc-warning-border);
+  border-left-color: var(--calc-warning-text);
+}
+
+/* Severe result warning (most or all values are defaults). Reuses the base
+   red tone but with bold text to flag how unreliable the result is. */
+.result-warning-severe {
   font-weight: bold;
 }
 
@@ -522,16 +538,6 @@ input[type="number"] {
   font-size: 0.85em;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.status-terminal__dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #ff6058;
-  box-shadow: 14px 0 0 #ffbd2e, 28px 0 0 #28c941;
-  margin-right: 18px;
 }
 
 .status-terminal__body {

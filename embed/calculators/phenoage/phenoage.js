@@ -20,7 +20,9 @@ function loadStrings(lang) {
 
 /** Look up a translated string by key, with optional positional placeholders {0}, {1}, etc. */
 function t(key) {
-  var s = strings[key] || key;
+  // Note: explicit `in` check, not `||`, so deliberately empty values like
+  // the singular suffix in "field{1}" don't fall back to returning the key.
+  var s = (key in strings) ? strings[key] : key;
   for (var i = 1; i < arguments.length; i++) {
     s = s.split('{' + (i - 1) + '}').join(arguments[i]);
   }
@@ -389,19 +391,21 @@ function setStatusHeading() {
   if (label) label.textContent = t('status_heading');
 }
 
+// Replaces the panel content with a single line describing the current state.
+// We don't accumulate a log — past states ("Ready", "awaiting values") aren't
+// useful once superseded by the new state, and stacking them up just adds
+// noise.
 function addStatus(text, level) {
   var body = document.getElementById('statusTerminalBody');
   if (!body || !text) return;
-  // Skip if the latest line already says exactly this — avoids spam from
-  // rapid input events.
-  var last = body.lastElementChild;
-  if (last && last.textContent === text && last.dataset.level === (level || '')) return;
+  var current = body.firstElementChild;
+  if (current && current.textContent === text && current.dataset.level === (level || '')) return;
+  body.innerHTML = '';
   var line = document.createElement('div');
   line.className = 'status-terminal__line' + (level ? ' status-terminal__line--' + level : '');
   line.dataset.level = level || '';
   line.textContent = text;
   body.appendChild(line);
-  body.scrollTop = body.scrollHeight;
 }
 
 function clearInputErrors() {
@@ -510,6 +514,10 @@ function calculateResult() {
   var summaryEl = document.getElementById('resultSummary');
   clearInputErrors();
   var errors = [];
+  // A status message a downstream block wants to show in place of the default
+  // "Calculation complete" line (e.g. "1 of N values is a population
+  // average"). Set by the defaults block; emitted at the end.
+  var pendingStatus = null;
 
   // Read biomarker values and selected units from the form (always, even without DOB)
   var rawValues = [];
@@ -735,7 +743,8 @@ function calculateResult() {
     return;
   }
 
-  addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
+  // Defer emitting the success status until after the defaults check below
+  // so a "1 of N is a population average" message can take precedence.
 
   // 1. Share card (the primary visual result)
   generateShareCard(phenoAge, age, acceleration);
@@ -743,7 +752,10 @@ function calculateResult() {
   // 2. Warnings (defaults, implausible values)
   warningsDiv.innerHTML = '';
 
-  // Note if any values are population defaults — graduated warning
+  // Note if any values are population defaults — graduated warning. Low
+  // counts surface in the status panel (informational); higher counts get
+  // the more attention-grabbing result-warning banner near the result, with
+  // the most severe cases in the red error tone.
   var defaultCount = 0;
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
@@ -751,22 +763,24 @@ function calculateResult() {
   }
   if (defaultCount > 0) {
     var totalTests = formTests.length;
-    var warningKey;
-    if (defaultCount >= totalTests) {
-      warningKey = 'defaults_warning_all';
-    } else if (defaultCount >= Math.ceil(totalTests * 2 / 3)) {
-      warningKey = 'defaults_warning_extreme';
-    } else if (defaultCount >= Math.ceil(totalTests / 3)) {
-      warningKey = 'defaults_warning_very';
-    } else if (defaultCount === 1) {
-      warningKey = 'defaults_warning_one';
+    var oneThird = Math.ceil(totalTests / 3);
+    var twoThirds = Math.ceil(totalTests * 2 / 3);
+    if (defaultCount < oneThird) {
+      // Small number of defaults — gentle, status-panel notice.
+      var key = (defaultCount === 1) ? 'defaults_warning_one' : 'defaults_warning_few';
+      pendingStatus = { text: t(key, defaultCount, totalTests), level: 'warn' };
     } else {
-      warningKey = 'defaults_warning_few';
+      var warningKey, modifier;
+      if (defaultCount >= totalTests) {
+        warningKey = 'defaults_warning_all'; modifier = ' result-warning-severe';
+      } else if (defaultCount >= twoThirds) {
+        warningKey = 'defaults_warning_extreme'; modifier = ' result-warning-severe';
+      } else {
+        warningKey = 'defaults_warning_very'; modifier = ' result-warning--mild';
+      }
+      warningsDiv.innerHTML += '<div class="result-warning' + modifier + '">' +
+        t(warningKey, defaultCount, totalTests) + '</div>';
     }
-    var level = (defaultCount >= Math.ceil(totalTests / 3)) ? 'error' : 'warning';
-    warningsDiv.innerHTML += '<div class="result-warning' +
-      (level === 'error' ? ' result-warning-severe' : '') + '">' +
-      t(warningKey, defaultCount, totalTests) + '</div>';
   }
 
   // Warning if any values look implausible
@@ -776,6 +790,13 @@ function calculateResult() {
       : t('result_implausible_warning_many', joinAndList(implausibleNames));
     warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
       warningText + '</div>';
+  }
+
+  // Final status line: defaults notice if relevant, otherwise success.
+  if (pendingStatus) {
+    addStatus(pendingStatus.text, pendingStatus.level);
+  } else {
+    addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
   }
 
   // 3. Descriptive summary text (below the share buttons).
@@ -1164,6 +1185,10 @@ function createFormElements() {
   }
   testdateRow.appendChild(testdateLabel);
   testdateRow.appendChild(testdateInput);
+  var ageReadout = document.createElement('span');
+  ageReadout.id = 'ageReadout';
+  ageReadout.className = 'age-readout';
+  testdateRow.appendChild(ageReadout);
   dateSection.appendChild(testdateRow);
 
   // CSV upload — available at the top so users can load data before entering values
@@ -1357,6 +1382,25 @@ function placeDobPrompt(asError) {
 
 function updateDobPrompt() {
   placeDobPrompt(false);
+  updateAgeReadout();
+}
+
+// Show the user's age at the test date next to the test-date field, so they
+// can sanity-check the dates without scrolling down to the result.
+function updateAgeReadout() {
+  var el = document.getElementById('ageReadout');
+  if (!el) return;
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+  if (!dobVal || !testdateVal) { el.textContent = ''; return; }
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+  if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) {
+    el.textContent = '';
+    return;
+  }
+  var age = calculateAge(dob, testDate);
+  el.textContent = '(age ' + age.toFixed(1) + ' at test date)';
 }
 
 function showDefaultsMessage(text, type) {
