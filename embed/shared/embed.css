@@ -159,12 +159,15 @@ select {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%23eae8e6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
 }
 
+/* Disabled selects (units that can't be changed) keep the same box shape,
+   text colour, and background as enabled ones — only the chevron and pointer
+   go away. Faded text would look like something's broken. */
 select:disabled {
   background-image: none;
-  background-color: var(--calc-bg);
-  color: var(--calc-text-faint);
+  background-color: var(--calc-input-bg);
+  color: var(--calc-text);
+  opacity: 1;
   cursor: default;
-  opacity: 0.85;
 }
 
 /* No spinner controls on number inputs — users will type values, not step. */
@@ -189,8 +192,9 @@ input[type="number"] {
 
 /* Population-default fills — italic and tinted with the same friendly blue
    used for the date-of-birth prompt, so they read as "we filled this in for
-   you" rather than as a real entry. */
-.default-value {
+   you" rather than as a real entry. Selector deliberately scoped to inputs
+   so the (more specific) attribute selector earlier doesn't override it. */
+input.default-value {
   color: var(--calc-info-text);
   font-style: italic;
   background: var(--calc-info-bg);
@@ -254,14 +258,10 @@ input[type="number"] {
 .bioageform td:nth-of-type(2) { width: 9.5em; padding-left: 6px; }
 .bioageform td:nth-of-type(2) select { width: 100%; box-sizing: border-box; }
 
-/* Range alerts sit in a tr below the input, sharing its border-bottom so
-   the alert visually attaches to the field it describes. */
-.bioageform .range-alert > td { padding: 0 0 8px; }
-.bioageform tr:has(+ .range-alert) input,
-.bioageform tr:has(+ .range-alert) select {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
+/* Range alerts sit in a tr below the input as their own self-contained
+   banner. They span the full table width so a long message wraps naturally;
+   the small top gap separates them from the input above. */
+.bioageform .range-alert > td { padding: 4px 0 8px; }
 
 .input-alert {
   margin: 0;
@@ -270,8 +270,7 @@ input[type="number"] {
   color: var(--calc-warning-text);
   background: var(--calc-warning-bg);
   border: 1px solid var(--calc-warning-border);
-  border-top: none;
-  border-radius: 0 0 var(--calc-radius) var(--calc-radius);
+  border-radius: var(--calc-radius);
 }
 .input-alert-error {
   color: var(--calc-error-text);

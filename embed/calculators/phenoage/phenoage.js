@@ -1538,6 +1538,8 @@ function fillAutoValues() {
     input.classList.remove('pending-auto');
     ctx[formTests[i].id] = canonicalDefault;
   }
+  // Reflect the new default count in the "Fill missing values" button.
+  updateDefaultsButton();
 }
 
 // --- CSV download ---
