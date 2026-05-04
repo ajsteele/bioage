@@ -20,7 +20,9 @@ function loadStrings(lang) {
 
 /** Look up a translated string by key, with optional positional placeholders {0}, {1}, etc. */
 function t(key) {
-  var s = strings[key] || key;
+  // Note: explicit `in` check, not `||`, so deliberately empty values like
+  // the singular suffix in "field{1}" don't fall back to returning the key.
+  var s = (key in strings) ? strings[key] : key;
   for (var i = 1; i < arguments.length; i++) {
     s = s.split('{' + (i - 1) + '}').join(arguments[i]);
   }
@@ -341,14 +343,28 @@ function extractValuesFromAnchor(url) {
   return result;
 }
 
+// Token used in serialised forms (URL anchor, CSV, localStorage) for values
+// that came from the population-defaults table rather than the user. Recorded
+// as a token rather than the computed number so they can re-imputed if the
+// imputation method changes, and so they don't masquerade as user data when
+// inspected.
+var AUTO_TOKEN = 'auto';
+
+function isAutoValue(v) {
+  return typeof v === 'string' && v.toLowerCase() === AUTO_TOKEN;
+}
+
 function createAnchorFromValues(dob, testdate, formTests, values, units) {
   var url = '#dob=' + encodeURIComponent(dob) +
     anchorKeysSeparator + 'testdate=' + encodeURIComponent(testdate);
 
   for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    var isDefault = input && input.classList.contains('default-value');
+    var serialisedValue = isDefault ? AUTO_TOKEN : values[i];
     url += anchorKeysSeparator +
       encodeURIComponent(formTests[i].id) + '=' +
-      encodeURIComponent(values[i]) + anchorUnitsSeparator +
+      encodeURIComponent(serialisedValue) + anchorUnitsSeparator +
       encodeURIComponent(units[i]);
   }
   return url;
@@ -378,6 +394,36 @@ function parseInput(value) {
   return Number(value);
 }
 
+// --- Status terminal ---
+//
+// Single bottom-of-page log for non-field-specific events (CSV loaded, defaults
+// filled, calculation complete, awaiting input, etc.). Field-specific errors
+// stay inline next to the field they relate to — we don't double them up here.
+
+function setStatusHeading() {
+  var label = document.querySelector('.status-terminal__label');
+  if (label) label.textContent = t('status_heading');
+}
+
+// The terminal shows every message that's currently true, so a single calc
+// pass can emit several lines (e.g. "complete" + "1 default" + "implausible
+// values"). Callers are responsible for clearing first if they want a fresh
+// view; calculateResult always clears.
+function clearStatus() {
+  var body = document.getElementById('statusTerminalBody');
+  if (body) body.innerHTML = '';
+}
+
+function addStatus(text, level) {
+  if (!text) return;
+  var body = document.getElementById('statusTerminalBody');
+  if (!body) return;
+  var line = document.createElement('div');
+  line.className = 'status-terminal__line' + (level ? ' status-terminal__line--' + level : '');
+  line.textContent = text;
+  body.appendChild(line);
+}
+
 function clearInputErrors() {
   var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
   for (var i = 0; i < errors.length; i++) {
@@ -389,16 +435,29 @@ function clearInputErrors() {
   for (var i = 0; i < msgs.length; i++) {
     msgs[i].remove();
   }
+  // Clear date-row error tone (placeDobPrompt will re-apply info/error as
+  // appropriate for the current state).
+  ['dobRow', 'testdateRow'].forEach(function(id) {
+    var row = document.getElementById(id);
+    if (row) row.classList.remove('date-row--error');
+  });
 }
 
 function markInputError(elementId, message) {
   var el = document.getElementById(elementId);
-  if (el) el.classList.add('errorNaN');
-  if (message) {
+  if (el) el.classList.add('errorNaN', 'input-error');
+  if (message && el && el.parentNode) {
     var msg = document.createElement('span');
     msg.className = 'error-message';
-    msg.textContent = ' ' + message;
-    if (el && el.parentNode) el.parentNode.appendChild(msg);
+    msg.textContent = message;
+    el.parentNode.appendChild(msg);
+  }
+  // For date-row inputs, escalate the surrounding card to the error tone so
+  // the message and the field share the same visual container.
+  var row = el && el.closest && el.closest('.date-row');
+  if (row) {
+    row.classList.remove('date-row--info');
+    row.classList.add('date-row--error');
   }
 }
 
@@ -467,9 +526,12 @@ function showRangeAlert(elementId, level, message) {
 function calculateResult() {
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
-  var warningsDiv = document.getElementById('resultWarnings');
   var summaryEl = document.getElementById('resultSummary');
   clearInputErrors();
+  // Terminal reflects current state, so wipe and rebuild on every call. All
+  // status messages this pass produces are pushed in order; the last addStatus
+  // wins visibility-wise but every line stays visible.
+  clearStatus();
   var errors = [];
 
   // Read biomarker values and selected units from the form (always, even without DOB)
@@ -553,7 +615,7 @@ function calculateResult() {
   }
 
   if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+    addStatus(t('error_prefix', errors.join('; ')), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -576,30 +638,16 @@ function calculateResult() {
 
   if (!hasDates) {
     // Show DOB prompt — escalate to error style if all biomarker values are filled.
-    // Wording adapts to which date(s) are missing.
-    if (dobPrompt) {
-      dobPrompt.style.display = '';
-      var missingDob = !dobVal;
-      var missingTest = !testdateVal;
-      var promptKey;
-      if (allFilled) {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
-          : missingDob ? 'dob_prompt_error_dob'
-          : 'dob_prompt_error_testdate';
-        dobPrompt.className = 'dob-prompt dob-prompt-error';
-      } else {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
-          : missingDob ? 'dob_prompt'
-          : 'dob_prompt_testdate';
-        dobPrompt.className = 'dob-prompt';
-      }
-      dobPrompt.textContent = t(promptKey);
-    }
+    // Wording adapts to which date(s) are missing, and the prompt is parented
+    // to whichever row needs filling so the visual card wraps it.
+    placeDobPrompt(allFilled);
     if (!allFilled) {
-      warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
-    } else {
-      warningsDiv.innerHTML = '';
+      addStatus(t('prompt_enter_all_values'), 'warn');
     }
+    var dateStatusKey = (!dobVal && !testdateVal) ? 'status_awaiting_dates'
+      : !dobVal ? 'status_awaiting_dob'
+      : 'status_awaiting_testdate';
+    addStatus(t(dateStatusKey), 'warn');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -615,21 +663,23 @@ function calculateResult() {
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
 
+  // Date validation: inline-only, no duplicate in the status panel — the
+  // input card already shows the message right next to the field.
+  var dateError = false;
   if (isNaN(dob.getTime())) {
     markInputError('dob', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_dob')));
+    dateError = true;
   }
   if (isNaN(testDate.getTime())) {
     markInputError('testdate', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_test_date')));
+    dateError = true;
   }
   if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
     markInputError('testdate', t('error_test_date_after_dob'));
-    errors.push(t('error_test_date_after_dob_detail'));
+    dateError = true;
   }
 
-  if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
+  if (dateError) {
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -638,7 +688,7 @@ function calculateResult() {
 
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
+    addStatus(t('error_prefix', t('error_age_out_of_range', age.toFixed(1))), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -646,7 +696,7 @@ function calculateResult() {
   }
 
   if (!allFilled) {
-    warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
+    addStatus(t('prompt_enter_all_values'), 'warn');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -694,7 +744,7 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    warningsDiv.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
+    addStatus(t('error_calculation_failed'), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -704,10 +754,11 @@ function calculateResult() {
   // 1. Share card (the primary visual result)
   generateShareCard(phenoAge, age, acceleration);
 
-  // 2. Warnings (defaults, implausible values)
-  warningsDiv.innerHTML = '';
+  // 2. Terminal — calc complete first, then any caveats. We collect issues
+  // here rather than scattering them across separate banners so the user has
+  // one place to look for "what's still imperfect about this answer".
+  addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
 
-  // Note if any values are population defaults — graduated warning
   var defaultCount = 0;
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
@@ -715,31 +766,28 @@ function calculateResult() {
   }
   if (defaultCount > 0) {
     var totalTests = formTests.length;
-    var warningKey;
+    var oneThird = Math.ceil(totalTests / 3);
+    var twoThirds = Math.ceil(totalTests * 2 / 3);
+    var defaultsKey, defaultsLevel;
     if (defaultCount >= totalTests) {
-      warningKey = 'defaults_warning_all';
-    } else if (defaultCount >= Math.ceil(totalTests * 2 / 3)) {
-      warningKey = 'defaults_warning_extreme';
-    } else if (defaultCount >= Math.ceil(totalTests / 3)) {
-      warningKey = 'defaults_warning_very';
+      defaultsKey = 'defaults_warning_all'; defaultsLevel = 'err';
+    } else if (defaultCount >= twoThirds) {
+      defaultsKey = 'defaults_warning_extreme'; defaultsLevel = 'err';
+    } else if (defaultCount >= oneThird) {
+      defaultsKey = 'defaults_warning_very'; defaultsLevel = 'warn';
     } else if (defaultCount === 1) {
-      warningKey = 'defaults_warning_one';
+      defaultsKey = 'defaults_warning_one'; defaultsLevel = 'warn';
     } else {
-      warningKey = 'defaults_warning_few';
+      defaultsKey = 'defaults_warning_few'; defaultsLevel = 'warn';
     }
-    var level = (defaultCount >= Math.ceil(totalTests / 3)) ? 'error' : 'warning';
-    warningsDiv.innerHTML += '<div class="result-warning' +
-      (level === 'error' ? ' result-warning-severe' : '') + '">' +
-      t(warningKey, defaultCount, totalTests) + '</div>';
+    addStatus(t(defaultsKey, defaultCount, totalTests), defaultsLevel);
   }
 
-  // Warning if any values look implausible
   if (implausibleNames.length > 0) {
     var warningText = implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
       : t('result_implausible_warning_many', joinAndList(implausibleNames));
-    warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
-      warningText + '</div>';
+    addStatus(t('result_implausible_warning_prefix') + warningText, 'err');
   }
 
   // 3. Descriptive summary text (below the share buttons).
@@ -1090,6 +1138,7 @@ function createFormElements() {
 
   var dobRow = document.createElement('div');
   dobRow.className = 'date-row';
+  dobRow.id = 'dobRow';
   var dobLabel = document.createElement('label');
   dobLabel.setAttribute('for', 'dob');
   dobLabel.textContent = t('label_dob');
@@ -1111,6 +1160,7 @@ function createFormElements() {
 
   var testdateRow = document.createElement('div');
   testdateRow.className = 'date-row';
+  testdateRow.id = 'testdateRow';
   var testdateLabel = document.createElement('label');
   testdateLabel.setAttribute('for', 'testdate');
   testdateLabel.textContent = t('label_test_date');
@@ -1126,35 +1176,50 @@ function createFormElements() {
   }
   testdateRow.appendChild(testdateLabel);
   testdateRow.appendChild(testdateInput);
+  var ageReadout = document.createElement('span');
+  ageReadout.id = 'ageReadout';
+  ageReadout.className = 'age-readout';
+  testdateRow.appendChild(ageReadout);
   dateSection.appendChild(testdateRow);
 
-  // CSV upload — available at the top so users can load data before entering values
-  var csvRow = document.createElement('div');
-  csvRow.className = 'date-row csv-load-row';
+  // CSV upload + (when applicable) "clear saved data" link, grouped on the
+  // right of the date section so they don't sit alone in the page.
+  var toolsRow = document.createElement('div');
+  toolsRow.className = 'date-tools';
   var csvBtn = document.createElement('button');
   csvBtn.setAttribute('type', 'button');
-  csvBtn.className = 'csv-upload';
   csvBtn.textContent = t('save_upload_csv');
   csvBtn.onclick = uploadCSV;
-  csvRow.appendChild(csvBtn);
+  toolsRow.appendChild(csvBtn);
   var csvFileInput = document.createElement('input');
   csvFileInput.setAttribute('type', 'file');
   csvFileInput.setAttribute('id', 'csvFileInput');
   csvFileInput.setAttribute('accept', '.csv');
   csvFileInput.style.display = 'none';
   csvFileInput.setAttribute('onchange', 'handleCSVUpload(this)');
-  csvRow.appendChild(csvFileInput);
-  dateSection.appendChild(csvRow);
+  toolsRow.appendChild(csvFileInput);
+  if (fromStorage) {
+    var storageNotice = document.createElement('span');
+    storageNotice.id = 'storageNotice';
+    storageNotice.className = 'storage-notice-inline';
+    storageNotice.innerHTML = t('storage_restored') +
+      ' <a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
+    toolsRow.appendChild(storageNotice);
+  }
+  dateSection.appendChild(toolsRow);
 
   formDiv.appendChild(dateSection);
 
-  // DOB prompt — shown when date of birth is not yet entered
+  // DOB prompt — placed inside whichever date row needs filling, so the row's
+  // info-card styling visually wraps the message.
   var dobPrompt = document.createElement('div');
   dobPrompt.className = 'dob-prompt';
   dobPrompt.id = 'dobPrompt';
   dobPrompt.textContent = t('dob_prompt');
-  if (saved && saved.dob) dobPrompt.style.display = 'none';
-  formDiv.appendChild(dobPrompt);
+  if (saved && saved.dob && saved.testdate) dobPrompt.style.display = 'none';
+  // Initial parent: dob row (it'll be moved by updateDobPrompt as needed).
+  dobRow.appendChild(dobPrompt);
+  updateDobPrompt();
 
   // Biomarker inputs table
   var formTable = document.createElement('table');
@@ -1185,7 +1250,13 @@ function createFormElements() {
       }
     }
     if (savedTest) {
-      input.setAttribute('value', savedTest.value);
+      if (isAutoValue(savedTest.value)) {
+        // Population-default flag — fillAutoValues will fill it in once the
+        // form is built and the user's age is known.
+        input.classList.add('pending-auto');
+      } else {
+        input.setAttribute('value', savedTest.value);
+      }
     }
     inputCell.appendChild(input);
     formRow.appendChild(inputCell);
@@ -1194,6 +1265,11 @@ function createFormElements() {
     var select = document.createElement('select');
     select.setAttribute('id', formTests[i].id + 'Unit');
     select.setAttribute('oninput', 'calculateResult()');
+    // Skip in tab order: unit changes are essentially always done with the
+    // mouse, and including them gives an inconsistent number of tab stops per
+    // row (rows whose only available unit is canonical use a disabled select,
+    // which the browser already skips).
+    select.setAttribute('tabindex', '-1');
     unitCell.appendChild(select);
     formRow.appendChild(unitCell);
 
@@ -1216,19 +1292,9 @@ function createFormElements() {
   form.appendChild(formTable);
   formDiv.appendChild(form);
 
-  // Restore default-value styling for fields loaded from localStorage
-  if (fromStorage) {
-    for (var i = 0; i < formTests.length; i++) {
-      var storedTest = null;
-      for (var k = 0; k < saved.tests.length; k++) {
-        if (saved.tests[k].id === formTests[i].id) { storedTest = saved.tests[k]; break; }
-      }
-      if (storedTest && storedTest.isDefault) {
-        var inp = document.getElementById(formTests[i].id);
-        if (inp) inp.classList.add('default-value');
-      }
-    }
-  }
+  // Materialise any rows flagged as defaults in the saved data (URL anchor,
+  // localStorage, or CSV pending an auto fill) into actual numbers.
+  fillAutoValues();
 
   // "Fill missing with defaults" button
   var defaultsDiv = document.createElement('div');
@@ -1246,16 +1312,6 @@ function createFormElements() {
   defaultsDiv.appendChild(defaultsNote);
   formDiv.appendChild(defaultsDiv);
 
-  // Storage notice
-  if (fromStorage) {
-    var storageDiv = document.createElement('div');
-    storageDiv.className = 'storage-notice';
-    storageDiv.id = 'storageNotice';
-    storageDiv.innerHTML = t('storage_restored') + ' ' +
-      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
-    formDiv.appendChild(storageDiv);
-  }
-
   if (saved && saved.dob && saved.tests.length > 0) {
     calculateResult();
   }
@@ -1265,44 +1321,100 @@ function createFormElements() {
 
 // --- Fill missing values with age-appropriate population defaults ---
 
-function updateDobPrompt() {
+// Move the DOB prompt into whichever date row it relates to, so the row's
+// info-card styling visually wraps the prompt right under the field that
+// needs filling in.
+function clearDateRowState() {
+  ['dobRow', 'testdateRow'].forEach(function(id) {
+    var row = document.getElementById(id);
+    if (row) row.classList.remove('date-row--info', 'date-row--error');
+  });
+}
+
+function placeDobPrompt(asError) {
   var prompt = document.getElementById('dobPrompt');
   if (!prompt) return;
   var dobVal = document.getElementById('dob').value;
   var testdateVal = document.getElementById('testdate').value;
+  clearDateRowState();
   if (dobVal && testdateVal) {
     prompt.style.display = 'none';
     return;
   }
-  prompt.style.display = '';
-  prompt.className = 'dob-prompt';
   var missingDob = !dobVal;
   var missingTest = !testdateVal;
-  var key = (missingDob && missingTest) ? 'dob_prompt_both'
-    : missingDob ? 'dob_prompt'
-    : 'dob_prompt_testdate';
-  prompt.textContent = t(key);
+  var promptKey, targetId;
+  if (asError) {
+    promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
+      : missingDob ? 'dob_prompt_error_dob'
+      : 'dob_prompt_error_testdate';
+  } else {
+    promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
+      : missingDob ? 'dob_prompt'
+      : 'dob_prompt_testdate';
+  }
+  targetId = missingDob ? 'dobRow' : 'testdateRow';
+
+  prompt.style.display = '';
+  prompt.className = 'dob-prompt' + (asError ? ' dob-prompt-error' : '');
+  prompt.textContent = t(promptKey);
+  var target = document.getElementById(targetId);
+  if (target) {
+    if (prompt.parentNode !== target) target.appendChild(prompt);
+    target.classList.add(asError ? 'date-row--error' : 'date-row--info');
+  }
+}
+
+function updateDobPrompt() {
+  placeDobPrompt(false);
+  updateAgeReadout();
+}
+
+// Show the user's age at the test date next to the test-date field, so they
+// can sanity-check the dates without scrolling down to the result.
+function updateAgeReadout() {
+  var el = document.getElementById('ageReadout');
+  if (!el) return;
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+  if (!dobVal || !testdateVal) { el.textContent = ''; return; }
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+  if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) {
+    el.textContent = '';
+    return;
+  }
+  var age = calculateAge(dob, testDate);
+  el.textContent = '(age ' + age.toFixed(1) + ' at test date)';
 }
 
 function showDefaultsMessage(text, type) {
-  var section = document.getElementById('defaultsSection');
-  if (!section) return;
-  var existing = section.querySelector('.defaults-message');
-  if (existing) existing.remove();
-  var msg = document.createElement('p');
-  msg.className = 'defaults-message' + (type === 'success' ? ' success' : '');
-  msg.textContent = text;
-  section.appendChild(msg);
+  // Routed through the status terminal so all non-field messages live in the
+  // same place (and we only have one log to look at).
+  addStatus(text, type === 'success' ? 'ok' : 'warn');
 }
 
 function updateDefaultsButton() {
   var btn = document.getElementById('defaultsBtn');
   if (!btn) return;
-  var allFilled = formTests.every(function(t) {
-    var input = document.getElementById(t.id);
-    return input && input.value !== '';
-  });
+  var allFilled = true;
+  var defaultCount = 0;
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input) continue;
+    if (input.value === '') allFilled = false;
+    if (input.classList.contains('default-value')) defaultCount++;
+  }
   btn.disabled = allFilled;
+  if (defaultCount > 0) {
+    btn.classList.add('defaults-btn--filled');
+    btn.textContent = defaultCount === 1
+      ? t('defaults_button_filled_one')
+      : t('defaults_button_filled_many', defaultCount);
+  } else {
+    btn.classList.remove('defaults-btn--filled');
+    btn.textContent = t('defaults_button');
+  }
 }
 
 function fillMissingWithDefaults() {
@@ -1366,7 +1478,8 @@ function fillMissingWithDefaults() {
   }
 
   if (filled > 0) {
-    showDefaultsMessage(t('defaults_filled', filled, filled > 1 ? t('defaults_filled_plural') : t('defaults_filled_singular')), 'success');
+    // No transient "Filled N fields" message — calculateResult will rebuild
+    // the status panel and the defaults_warning line names the count anyway.
     calculateResult();
   }
 
@@ -1376,6 +1489,57 @@ function fillMissingWithDefaults() {
 // Clear default styling when user types in a field
 function clearDefaultStyling(input) {
   input.classList.remove('default-value');
+}
+
+// Walk the form and replace any inputs whose current value is the AUTO_TOKEN
+// (or whose row is flagged as a default in saved data) with population
+// averages for the user's age. Runs after a fresh form is built from a saved
+// URL/CSV/localStorage state so default-flagged values get materialised.
+function fillAutoValues() {
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+  if (!dobVal || !testdateVal) return;
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+  if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) return;
+  var age = calculateAge(dob, testDate);
+
+  // Build a canonical context from explicit (non-auto) values so dependent
+  // tests like lymphocytes-as-absolute-count can resolve.
+  var ctx = { age: age };
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input || isAutoValue(input.value) || input.classList.contains('pending-auto')) continue;
+    var raw = parseInput(input.value);
+    if (isNaN(raw)) continue;
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var unit = unitSelect.options[unitSelect.selectedIndex].text;
+    var canon = toCanonical(raw, unit, formTests[i].id, ctx);
+    if (canon != null && !isNaN(canon)) ctx[formTests[i].id] = canon;
+  }
+
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input) continue;
+    if (!isAutoValue(input.value) && !input.classList.contains('pending-auto')) continue;
+    var canonicalDefault = getDefaultForAge(age, formTests[i].id);
+    if (canonicalDefault == null) { input.value = ''; input.classList.remove('pending-auto'); continue; }
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var unit = unitSelect.options[unitSelect.selectedIndex].text;
+    var displayVal = fromCanonical(canonicalDefault, unit, formTests[i].id, ctx);
+    if (displayVal == null || isNaN(displayVal)) { input.value = ''; input.classList.remove('pending-auto'); continue; }
+    var rounded;
+    if (displayVal < 0.1) rounded = displayVal.toPrecision(2);
+    else if (displayVal < 10) rounded = displayVal.toFixed(2);
+    else if (displayVal < 100) rounded = displayVal.toFixed(1);
+    else rounded = displayVal.toFixed(0);
+    input.value = rounded;
+    input.classList.add('default-value');
+    input.classList.remove('pending-auto');
+    ctx[formTests[i].id] = canonicalDefault;
+  }
+  // Reflect the new default count in the "Fill missing values" button.
+  updateDefaultsButton();
 }
 
 // --- CSV download ---
@@ -1392,8 +1556,8 @@ function downloadCSV() {
     var input = document.getElementById(formTests[i].id);
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
     var unit = unitSelect.options[unitSelect.selectedIndex].text;
-    var isDefault = input.classList.contains('default-value') ? ' (population default)' : '';
-    lines.push(formTests[i].id + ',' + input.value + isDefault + ',' + unit);
+    var serialised = input.classList.contains('default-value') ? AUTO_TOKEN : input.value;
+    lines.push(formTests[i].id + ',' + serialised + ',' + unit);
   }
 
   // Add result if available
@@ -1465,14 +1629,7 @@ function pad(n) {
 }
 
 function showCSVMessage(text, isError) {
-  var row = document.querySelector('.csv-load-row');
-  if (!row) return;
-  var existing = row.querySelector('.csv-message');
-  if (existing) existing.remove();
-  var msg = document.createElement('span');
-  msg.className = 'csv-message' + (isError ? ' csv-message-error' : '');
-  msg.textContent = text;
-  row.appendChild(msg);
+  addStatus(text, isError ? 'err' : 'ok');
 }
 
 function handleCSVUpload(fileInput) {
@@ -1508,14 +1665,18 @@ function handleCSVUpload(fileInput) {
           if (dateInput.value) loaded++;
         }
       } else {
-        // Biomarker value — strip " (population default)" suffix if present
-        var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
+        // Biomarker value.
         var input = document.getElementById(field);
-        if (input && cleanValue) {
-          input.value = cleanValue;
-          input.classList.remove('default-value');
+        if (input && value) {
+          if (isAutoValue(value)) {
+            input.value = '';
+            input.classList.remove('default-value');
+            input.classList.add('pending-auto');
+          } else {
+            input.value = value;
+            input.classList.remove('default-value');
+          }
           loaded++;
-          // Set the matching unit if available
           if (unit) {
             var unitSelect = document.getElementById(field + 'Unit');
             if (unitSelect) {
@@ -1532,9 +1693,10 @@ function handleCSVUpload(fileInput) {
     }
 
     if (loaded > 0) {
-      showCSVMessage(t('save_upload_success', loaded,
-        loaded > 1 ? t('save_upload_success_plural') : t('save_upload_success_singular')), false);
+      // Form is now visibly populated — that's the confirmation. Skip a
+      // transient success message that calculateResult would clear anyway.
       updateDobPrompt();
+      fillAutoValues();
       updateDefaultsButton();
       calculateResult();
     } else {
@@ -1561,11 +1723,11 @@ function saveToLocalStorage() {
     for (var i = 0; i < formTests.length; i++) {
       var input = document.getElementById(formTests[i].id);
       var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+      var isDef = input.classList.contains('default-value');
       data.tests.push({
         id: formTests[i].id,
-        value: input.value,
-        units: unitSelect.options[unitSelect.selectedIndex].text,
-        isDefault: input.classList.contains('default-value')
+        value: isDef ? AUTO_TOKEN : input.value,
+        units: unitSelect.options[unitSelect.selectedIndex].text
       });
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1596,8 +1758,13 @@ function clearLocalStorage() {
 
 window.onload = function() {
   loadStrings('en').then(function() {
+    setStatusHeading();
     return loadConfig();
   }).then(function() {
+    // Seed the panel with a "ready" line. createFormElements may immediately
+    // run calculateResult if there's saved data — that wipes the panel and
+    // populates with the real state. If not, the ready line stays.
+    addStatus(t('status_ready'));
     createFormElements();
   }).catch(function(err) {
     console.error('Failed to load config:', err);

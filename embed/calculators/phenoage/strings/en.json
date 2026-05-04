@@ -39,6 +39,7 @@
   "defaults_warning_all": "This result is entirely based on population averages! Please enter some of your own blood test results to get a meaningful biological age estimate.",
   "result_implausible_warning_one": "The value for {0} looks implausible. Please check it and the selected units before relying on this result.",
   "result_implausible_warning_many": "The values for {0} look implausible. Please check them and the selected units before relying on this result.",
+  "result_implausible_warning_prefix": "Warning: ",
   "list_and": "and",
 
   "save_section_heading": "Save your result",
@@ -76,14 +77,22 @@
   "card_aria_label": "Biological age result card: biological age {0}, chronological age {1}, {2}",
 
   "defaults_button": "Fill missing values with population averages for my age",
+  "defaults_button_filled_one": "1 value filled with a population average",
+  "defaults_button_filled_many": "{0} values filled with population averages",
   "defaults_note": "Uses median values from the NHANES\u00a0III population study for your age.",
   "defaults_need_dates": "Please enter your date of birth and test date first.",
   "defaults_need_valid_dates": "Please enter valid dates first.",
-  "defaults_filled": "Filled {0} field{1} with population averages.",
-  "defaults_filled_plural": "s",
-  "defaults_filled_singular": "",
 
   "storage_restored": "Your previous values were restored from this browser\u2019s storage.",
   "storage_clear_link": "Clear saved data",
-  "storage_cleared": "Saved data cleared."
+  "storage_cleared": "Saved data cleared.",
+
+  "status_heading": "Status",
+  "status_ready": "Ready. Enter your details to calculate your biological age.",
+  "status_complete": "Calculation complete \u2014 biological age {0} years (chronological {1} years).",
+  "status_awaiting_values": "Waiting for the remaining biomarker values.",
+  "status_awaiting_dates": "Waiting for date of birth and test date.",
+  "status_awaiting_dob": "Waiting for date of birth.",
+  "status_awaiting_testdate": "Waiting for test date.",
+  "status_storage_restored": "Restored your previous values from this browser\u2019s storage."
 }

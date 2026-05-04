@@ -25,9 +25,15 @@
     <code>This form requires JavaScript to run. Please open in a browser with it enabled. It doesn’t store your data or do anything intrusive so don’t worry if you disable JavaScript for privacy reasons. :)</code>
   </div>
 
-  <div id="resultWarnings"></div>
+  <div id="statusTerminal" class="status-terminal" aria-live="polite" aria-atomic="true">
+    <div class="status-terminal__header">
+      <span class="status-terminal__label">Status</span>
+    </div>
+    <div id="statusTerminalBody" class="status-terminal__body"></div>
+  </div>
 
   <div id="shareSection" style="display: none;">
+    <p id="resultSummary" class="result-summary"></p>
     <div id="shareCardContainer"></div>
     <a id="shareCardImageLink" style="display:none;" download="my-biological-age.png"><img id="shareCardImage" alt="" style="max-width:100%; height:auto; border-radius:4px;"></a>
     <div class="share-buttons">
@@ -35,7 +41,6 @@
       <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
     </div>
     <p id="shareImageNote" class="share-image-note"></p>
-    <p id="resultSummary" class="result-summary"></p>
     <script>
       if (navigator.share && navigator.canShare) {
         document.getElementById('nativeShareBtn').style.display = '';
