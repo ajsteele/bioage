@@ -343,14 +343,28 @@ function extractValuesFromAnchor(url) {
   return result;
 }
 
+// Token used in serialised forms (URL anchor, CSV, localStorage) for values
+// that came from the population-defaults table rather than the user. Recorded
+// as a token rather than the computed number so they can re-imputed if the
+// imputation method changes, and so they don't masquerade as user data when
+// inspected.
+var AUTO_TOKEN = 'auto';
+
+function isAutoValue(v) {
+  return typeof v === 'string' && v.toLowerCase() === AUTO_TOKEN;
+}
+
 function createAnchorFromValues(dob, testdate, formTests, values, units) {
   var url = '#dob=' + encodeURIComponent(dob) +
     anchorKeysSeparator + 'testdate=' + encodeURIComponent(testdate);
 
   for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    var isDefault = input && input.classList.contains('default-value');
+    var serialisedValue = isDefault ? AUTO_TOKEN : values[i];
     url += anchorKeysSeparator +
       encodeURIComponent(formTests[i].id) + '=' +
-      encodeURIComponent(values[i]) + anchorUnitsSeparator +
+      encodeURIComponent(serialisedValue) + anchorUnitsSeparator +
       encodeURIComponent(units[i]);
   }
   return url;
@@ -391,19 +405,21 @@ function setStatusHeading() {
   if (label) label.textContent = t('status_heading');
 }
 
-// Replaces the panel content with a single line describing the current state.
-// We don't accumulate a log — past states ("Ready", "awaiting values") aren't
-// useful once superseded by the new state, and stacking them up just adds
-// noise.
-function addStatus(text, level) {
+// The terminal shows every message that's currently true, so a single calc
+// pass can emit several lines (e.g. "complete" + "1 default" + "implausible
+// values"). Callers are responsible for clearing first if they want a fresh
+// view; calculateResult always clears.
+function clearStatus() {
   var body = document.getElementById('statusTerminalBody');
-  if (!body || !text) return;
-  var current = body.firstElementChild;
-  if (current && current.textContent === text && current.dataset.level === (level || '')) return;
-  body.innerHTML = '';
+  if (body) body.innerHTML = '';
+}
+
+function addStatus(text, level) {
+  if (!text) return;
+  var body = document.getElementById('statusTerminalBody');
+  if (!body) return;
   var line = document.createElement('div');
   line.className = 'status-terminal__line' + (level ? ' status-terminal__line--' + level : '');
-  line.dataset.level = level || '';
   line.textContent = text;
   body.appendChild(line);
 }
@@ -510,14 +526,13 @@ function showRangeAlert(elementId, level, message) {
 function calculateResult() {
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
-  var warningsDiv = document.getElementById('resultWarnings');
   var summaryEl = document.getElementById('resultSummary');
   clearInputErrors();
+  // Terminal reflects current state, so wipe and rebuild on every call. All
+  // status messages this pass produces are pushed in order; the last addStatus
+  // wins visibility-wise but every line stays visible.
+  clearStatus();
   var errors = [];
-  // A status message a downstream block wants to show in place of the default
-  // "Calculation complete" line (e.g. "1 of N values is a population
-  // average"). Set by the defaults block; emitted at the end.
-  var pendingStatus = null;
 
   // Read biomarker values and selected units from the form (always, even without DOB)
   var rawValues = [];
@@ -600,7 +615,6 @@ function calculateResult() {
   }
 
   if (errors.length > 0) {
-    warningsDiv.innerHTML = '';
     addStatus(t('error_prefix', errors.join('; ')), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
@@ -627,15 +641,13 @@ function calculateResult() {
     // Wording adapts to which date(s) are missing, and the prompt is parented
     // to whichever row needs filling so the visual card wraps it.
     placeDobPrompt(allFilled);
-    warningsDiv.innerHTML = '';
     if (!allFilled) {
       addStatus(t('prompt_enter_all_values'), 'warn');
-    } else {
-      var statusKey = (!dobVal && !testdateVal) ? 'status_awaiting_dates'
-        : !dobVal ? 'status_awaiting_dob'
-        : 'status_awaiting_testdate';
-      addStatus(t(statusKey), 'warn');
     }
+    var dateStatusKey = (!dobVal && !testdateVal) ? 'status_awaiting_dates'
+      : !dobVal ? 'status_awaiting_dob'
+      : 'status_awaiting_testdate';
+    addStatus(t(dateStatusKey), 'warn');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -668,7 +680,6 @@ function calculateResult() {
   }
 
   if (dateError) {
-    warningsDiv.innerHTML = '';
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
     if (summaryEl) summaryEl.textContent = '';
@@ -677,7 +688,6 @@ function calculateResult() {
 
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    warningsDiv.innerHTML = '';
     addStatus(t('error_prefix', t('error_age_out_of_range', age.toFixed(1))), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
@@ -686,7 +696,6 @@ function calculateResult() {
   }
 
   if (!allFilled) {
-    warningsDiv.innerHTML = '';
     addStatus(t('prompt_enter_all_values'), 'warn');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
@@ -735,7 +744,6 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    warningsDiv.innerHTML = '';
     addStatus(t('error_calculation_failed'), 'err');
     if (shareSection) shareSection.style.display = 'none';
     if (saveSection) saveSection.style.display = 'none';
@@ -743,19 +751,14 @@ function calculateResult() {
     return;
   }
 
-  // Defer emitting the success status until after the defaults check below
-  // so a "1 of N is a population average" message can take precedence.
-
   // 1. Share card (the primary visual result)
   generateShareCard(phenoAge, age, acceleration);
 
-  // 2. Warnings (defaults, implausible values)
-  warningsDiv.innerHTML = '';
+  // 2. Terminal — calc complete first, then any caveats. We collect issues
+  // here rather than scattering them across separate banners so the user has
+  // one place to look for "what's still imperfect about this answer".
+  addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
 
-  // Note if any values are population defaults — graduated warning. Low
-  // counts surface in the status panel (informational); higher counts get
-  // the more attention-grabbing result-warning banner near the result, with
-  // the most severe cases in the red error tone.
   var defaultCount = 0;
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
@@ -765,38 +768,26 @@ function calculateResult() {
     var totalTests = formTests.length;
     var oneThird = Math.ceil(totalTests / 3);
     var twoThirds = Math.ceil(totalTests * 2 / 3);
-    if (defaultCount < oneThird) {
-      // Small number of defaults — gentle, status-panel notice.
-      var key = (defaultCount === 1) ? 'defaults_warning_one' : 'defaults_warning_few';
-      pendingStatus = { text: t(key, defaultCount, totalTests), level: 'warn' };
+    var defaultsKey, defaultsLevel;
+    if (defaultCount >= totalTests) {
+      defaultsKey = 'defaults_warning_all'; defaultsLevel = 'err';
+    } else if (defaultCount >= twoThirds) {
+      defaultsKey = 'defaults_warning_extreme'; defaultsLevel = 'err';
+    } else if (defaultCount >= oneThird) {
+      defaultsKey = 'defaults_warning_very'; defaultsLevel = 'warn';
+    } else if (defaultCount === 1) {
+      defaultsKey = 'defaults_warning_one'; defaultsLevel = 'warn';
     } else {
-      var warningKey, modifier;
-      if (defaultCount >= totalTests) {
-        warningKey = 'defaults_warning_all'; modifier = ' result-warning-severe';
-      } else if (defaultCount >= twoThirds) {
-        warningKey = 'defaults_warning_extreme'; modifier = ' result-warning-severe';
-      } else {
-        warningKey = 'defaults_warning_very'; modifier = ' result-warning--mild';
-      }
-      warningsDiv.innerHTML += '<div class="result-warning' + modifier + '">' +
-        t(warningKey, defaultCount, totalTests) + '</div>';
+      defaultsKey = 'defaults_warning_few'; defaultsLevel = 'warn';
     }
+    addStatus(t(defaultsKey, defaultCount, totalTests), defaultsLevel);
   }
 
-  // Warning if any values look implausible
   if (implausibleNames.length > 0) {
     var warningText = implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
       : t('result_implausible_warning_many', joinAndList(implausibleNames));
-    warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
-      warningText + '</div>';
-  }
-
-  // Final status line: defaults notice if relevant, otherwise success.
-  if (pendingStatus) {
-    addStatus(pendingStatus.text, pendingStatus.level);
-  } else {
-    addStatus(t('status_complete', phenoAge.toFixed(1), age.toFixed(1)), 'ok');
+    addStatus(t('result_implausible_warning_prefix') + warningText, 'err');
   }
 
   // 3. Descriptive summary text (below the share buttons).
@@ -1191,23 +1182,31 @@ function createFormElements() {
   testdateRow.appendChild(ageReadout);
   dateSection.appendChild(testdateRow);
 
-  // CSV upload — available at the top so users can load data before entering values
-  var csvRow = document.createElement('div');
-  csvRow.className = 'date-row csv-load-row';
+  // CSV upload + (when applicable) "clear saved data" link, grouped on the
+  // right of the date section so they don't sit alone in the page.
+  var toolsRow = document.createElement('div');
+  toolsRow.className = 'date-tools';
   var csvBtn = document.createElement('button');
   csvBtn.setAttribute('type', 'button');
-  csvBtn.className = 'csv-upload';
   csvBtn.textContent = t('save_upload_csv');
   csvBtn.onclick = uploadCSV;
-  csvRow.appendChild(csvBtn);
+  toolsRow.appendChild(csvBtn);
   var csvFileInput = document.createElement('input');
   csvFileInput.setAttribute('type', 'file');
   csvFileInput.setAttribute('id', 'csvFileInput');
   csvFileInput.setAttribute('accept', '.csv');
   csvFileInput.style.display = 'none';
   csvFileInput.setAttribute('onchange', 'handleCSVUpload(this)');
-  csvRow.appendChild(csvFileInput);
-  dateSection.appendChild(csvRow);
+  toolsRow.appendChild(csvFileInput);
+  if (fromStorage) {
+    var storageNotice = document.createElement('span');
+    storageNotice.id = 'storageNotice';
+    storageNotice.className = 'storage-notice-inline';
+    storageNotice.innerHTML = t('storage_restored') +
+      ' <a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
+    toolsRow.appendChild(storageNotice);
+  }
+  dateSection.appendChild(toolsRow);
 
   formDiv.appendChild(dateSection);
 
@@ -1251,7 +1250,16 @@ function createFormElements() {
       }
     }
     if (savedTest) {
-      input.setAttribute('value', savedTest.value);
+      // If this row was a population-default in the saved state, mark it so
+      // fillAutoValues can fill it in with a freshly-computed average for
+      // the user's current age (rather than restoring whatever number the
+      // saved file had pre-rounded). Both the explicit AUTO_TOKEN and the
+      // legacy isDefault flag are honoured.
+      if (isAutoValue(savedTest.value) || savedTest.isDefault) {
+        input.classList.add('pending-auto');
+      } else {
+        input.setAttribute('value', savedTest.value);
+      }
     }
     inputCell.appendChild(input);
     formRow.appendChild(inputCell);
@@ -1287,19 +1295,9 @@ function createFormElements() {
   form.appendChild(formTable);
   formDiv.appendChild(form);
 
-  // Restore default-value styling for fields loaded from localStorage
-  if (fromStorage) {
-    for (var i = 0; i < formTests.length; i++) {
-      var storedTest = null;
-      for (var k = 0; k < saved.tests.length; k++) {
-        if (saved.tests[k].id === formTests[i].id) { storedTest = saved.tests[k]; break; }
-      }
-      if (storedTest && storedTest.isDefault) {
-        var inp = document.getElementById(formTests[i].id);
-        if (inp) inp.classList.add('default-value');
-      }
-    }
-  }
+  // Materialise any rows flagged as defaults in the saved data (URL anchor,
+  // localStorage, or CSV pending an auto fill) into actual numbers.
+  fillAutoValues();
 
   // "Fill missing with defaults" button
   var defaultsDiv = document.createElement('div');
@@ -1316,16 +1314,6 @@ function createFormElements() {
   defaultsNote.textContent = t('defaults_note');
   defaultsDiv.appendChild(defaultsNote);
   formDiv.appendChild(defaultsDiv);
-
-  // Storage notice
-  if (fromStorage) {
-    var storageDiv = document.createElement('div');
-    storageDiv.className = 'storage-notice';
-    storageDiv.id = 'storageNotice';
-    storageDiv.innerHTML = t('storage_restored') + ' ' +
-      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
-    formDiv.appendChild(storageDiv);
-  }
 
   if (saved && saved.dob && saved.tests.length > 0) {
     calculateResult();
@@ -1480,7 +1468,8 @@ function fillMissingWithDefaults() {
   }
 
   if (filled > 0) {
-    showDefaultsMessage(t('defaults_filled', filled, filled > 1 ? t('defaults_filled_plural') : t('defaults_filled_singular')), 'success');
+    // No transient "Filled N fields" message — calculateResult will rebuild
+    // the status panel and the defaults_warning line names the count anyway.
     calculateResult();
   }
 
@@ -1490,6 +1479,55 @@ function fillMissingWithDefaults() {
 // Clear default styling when user types in a field
 function clearDefaultStyling(input) {
   input.classList.remove('default-value');
+}
+
+// Walk the form and replace any inputs whose current value is the AUTO_TOKEN
+// (or whose row is flagged as a default in saved data) with population
+// averages for the user's age. Runs after a fresh form is built from a saved
+// URL/CSV/localStorage state so default-flagged values get materialised.
+function fillAutoValues() {
+  var dobVal = document.getElementById('dob').value;
+  var testdateVal = document.getElementById('testdate').value;
+  if (!dobVal || !testdateVal) return;
+  var dob = new Date(dobVal + 'T00:00:00');
+  var testDate = new Date(testdateVal + 'T00:00:00');
+  if (isNaN(dob.getTime()) || isNaN(testDate.getTime()) || testDate <= dob) return;
+  var age = calculateAge(dob, testDate);
+
+  // Build a canonical context from explicit (non-auto) values so dependent
+  // tests like lymphocytes-as-absolute-count can resolve.
+  var ctx = { age: age };
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input || isAutoValue(input.value) || input.classList.contains('pending-auto')) continue;
+    var raw = parseInput(input.value);
+    if (isNaN(raw)) continue;
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var unit = unitSelect.options[unitSelect.selectedIndex].text;
+    var canon = toCanonical(raw, unit, formTests[i].id, ctx);
+    if (canon != null && !isNaN(canon)) ctx[formTests[i].id] = canon;
+  }
+
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input) continue;
+    if (!isAutoValue(input.value) && !input.classList.contains('pending-auto')) continue;
+    var canonicalDefault = getDefaultForAge(age, formTests[i].id);
+    if (canonicalDefault == null) { input.value = ''; input.classList.remove('pending-auto'); continue; }
+    var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+    var unit = unitSelect.options[unitSelect.selectedIndex].text;
+    var displayVal = fromCanonical(canonicalDefault, unit, formTests[i].id, ctx);
+    if (displayVal == null || isNaN(displayVal)) { input.value = ''; input.classList.remove('pending-auto'); continue; }
+    var rounded;
+    if (displayVal < 0.1) rounded = displayVal.toPrecision(2);
+    else if (displayVal < 10) rounded = displayVal.toFixed(2);
+    else if (displayVal < 100) rounded = displayVal.toFixed(1);
+    else rounded = displayVal.toFixed(0);
+    input.value = rounded;
+    input.classList.add('default-value');
+    input.classList.remove('pending-auto');
+    ctx[formTests[i].id] = canonicalDefault;
+  }
 }
 
 // --- CSV download ---
@@ -1506,8 +1544,8 @@ function downloadCSV() {
     var input = document.getElementById(formTests[i].id);
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
     var unit = unitSelect.options[unitSelect.selectedIndex].text;
-    var isDefault = input.classList.contains('default-value') ? ' (population default)' : '';
-    lines.push(formTests[i].id + ',' + input.value + isDefault + ',' + unit);
+    var serialised = input.classList.contains('default-value') ? AUTO_TOKEN : input.value;
+    lines.push(formTests[i].id + ',' + serialised + ',' + unit);
   }
 
   // Add result if available
@@ -1615,14 +1653,20 @@ function handleCSVUpload(fileInput) {
           if (dateInput.value) loaded++;
         }
       } else {
-        // Biomarker value — strip " (population default)" suffix if present
+        // Biomarker value. Honour both the new AUTO_TOKEN format and the
+        // legacy " (population default)" suffix from older CSVs.
         var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
         var input = document.getElementById(field);
         if (input && cleanValue) {
-          input.value = cleanValue;
-          input.classList.remove('default-value');
+          if (isAutoValue(cleanValue)) {
+            input.value = '';
+            input.classList.remove('default-value');
+            input.classList.add('pending-auto');
+          } else {
+            input.value = cleanValue;
+            input.classList.remove('default-value');
+          }
           loaded++;
-          // Set the matching unit if available
           if (unit) {
             var unitSelect = document.getElementById(field + 'Unit');
             if (unitSelect) {
@@ -1639,9 +1683,10 @@ function handleCSVUpload(fileInput) {
     }
 
     if (loaded > 0) {
-      showCSVMessage(t('save_upload_success', loaded,
-        loaded > 1 ? t('save_upload_success_plural') : t('save_upload_success_singular')), false);
+      // Form is now visibly populated — that's the confirmation. Skip a
+      // transient success message that calculateResult would clear anyway.
       updateDobPrompt();
+      fillAutoValues();
       updateDefaultsButton();
       calculateResult();
     } else {
@@ -1668,11 +1713,11 @@ function saveToLocalStorage() {
     for (var i = 0; i < formTests.length; i++) {
       var input = document.getElementById(formTests[i].id);
       var unitSelect = document.getElementById(formTests[i].id + 'Unit');
+      var isDef = input.classList.contains('default-value');
       data.tests.push({
         id: formTests[i].id,
-        value: input.value,
-        units: unitSelect.options[unitSelect.selectedIndex].text,
-        isDefault: input.classList.contains('default-value')
+        value: isDef ? AUTO_TOKEN : input.value,
+        units: unitSelect.options[unitSelect.selectedIndex].text
       });
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1706,8 +1751,11 @@ window.onload = function() {
     setStatusHeading();
     return loadConfig();
   }).then(function() {
-    createFormElements();
+    // Seed the panel with a "ready" line. createFormElements may immediately
+    // run calculateResult if there's saved data — that wipes the panel and
+    // populates with the real state. If not, the ready line stays.
     addStatus(t('status_ready'));
+    createFormElements();
   }).catch(function(err) {
     console.error('Failed to load config:', err);
     document.getElementById('phenoAgeForm').innerHTML =

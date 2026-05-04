@@ -39,6 +39,7 @@
   "defaults_warning_all": "This result is entirely based on population averages! Please enter some of your own blood test results to get a meaningful biological age estimate.",
   "result_implausible_warning_one": "The value for {0} looks implausible. Please check it and the selected units before relying on this result.",
   "result_implausible_warning_many": "The values for {0} look implausible. Please check them and the selected units before relying on this result.",
+  "result_implausible_warning_prefix": "Warning: ",
   "list_and": "and",
 
   "save_section_heading": "Save your result",
@@ -93,5 +94,6 @@
   "status_awaiting_values": "Waiting for the remaining biomarker values.",
   "status_awaiting_dates": "Waiting for date of birth and test date.",
   "status_awaiting_dob": "Waiting for date of birth.",
-  "status_awaiting_testdate": "Waiting for test date."
+  "status_awaiting_testdate": "Waiting for test date.",
+  "status_storage_restored": "Restored your previous values from this browser\u2019s storage."
 }

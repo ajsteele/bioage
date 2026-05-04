@@ -2,83 +2,69 @@
    Weights: 300 (light), 400 (regular), 500 (medium), 700 (bold)
    Source: Google Fonts, Inter v18 by Rasmus Andersson
    License: SIL Open Font License 1.1 */
-
 @font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
+  font-family: 'Inter'; font-style: normal; font-weight: 300; font-display: swap;
   src: url('fonts/inter-300.woff2') format('woff2');
 }
-
 @font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
+  font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap;
   src: url('fonts/inter-400.woff2') format('woff2');
 }
-
 @font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
+  font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap;
   src: url('fonts/inter-500.woff2') format('woff2');
 }
-
 @font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
+  font-family: 'Inter'; font-style: normal; font-weight: 700; font-display: swap;
   src: url('fonts/inter-700.woff2') format('woff2');
 }
 
-/* --- Theme: CSS custom properties --- */
+/* ===== Theme tokens =====
+   Palette is taken from the LI brand site so the embed sits naturally
+   alongside it on the page. Semantic tones (info / warning / error) don't
+   change between themes — colour is doing real work there. */
 
 :root {
-  /* LI brand light (default) */
   --calc-bg: #eae8e6;
   --calc-text: #0f2846;
   --calc-text-muted: #555;
   --calc-text-faint: #807d78;
+
   --calc-accent: #2e5ea8;
   --calc-accent-soft: rgba(46, 94, 168, 0.15);
   --calc-link: #2e5ea8;
+
   --calc-input-bg: #ffffff;
   --calc-input-border: #c0bcb5;
+  --calc-input-border-error: #c0392b;
+  --calc-input-border-warn: #d4a72c;
+
   --calc-btn-bg: #e0deda;
   --calc-btn-hover: #d4d1ca;
   --calc-border: #d4d1ca;
-  --calc-card-bg: #e3ecf6;
-  --calc-card-border: #b8cce6;
 
-  /* Semantic colours (don't change with theme) */
+  --calc-info-text: #0f2846;
+  --calc-info-bg: #e3ecf6;
+  --calc-info-border: #b8cce6;
   --calc-warning-text: #664d03;
   --calc-warning-bg: #fff3cd;
   --calc-warning-border: #ffecb5;
   --calc-error-text: #842029;
   --calc-error-bg: #f8d7da;
   --calc-error-border: #f5c2c7;
-  --calc-success-text: #0f5132;
-  --calc-success-bg: #d1e7dd;
-  --calc-success-border: #badbcc;
-  --calc-info-text: #0f2846;
-  --calc-info-bg: #e3ecf6;
-  --calc-info-border: #b8cce6;
 
-  /* Terminal / status panel */
   --calc-terminal-bg: #0f2846;
+  --calc-terminal-border: #1f3a5e;
   --calc-terminal-text: #c5d4e6;
   --calc-terminal-prompt: #5bc198;
   --calc-terminal-ok: #5bc198;
   --calc-terminal-warn: #fbbf24;
   --calc-terminal-err: #ff8a8a;
-  --calc-terminal-border: #1f3a5e;
+  --calc-terminal-link: #7db8f0;
+
+  --calc-radius: 4px;
 }
 
-/* Dark theme */
 .theme-dark {
   --calc-bg: #0f2846;
   --calc-text: #eae8e6;
@@ -92,11 +78,8 @@
   --calc-btn-bg: #1a3354;
   --calc-btn-hover: #234271;
   --calc-border: #234271;
-  --calc-card-bg: #1a3354;
-  --calc-card-border: #2c4666;
 }
 
-/* Auto theme: follows user's OS preference */
 @media (prefers-color-scheme: dark) {
   .theme-auto {
     --calc-bg: #0f2846;
@@ -111,12 +94,11 @@
     --calc-btn-bg: #1a3354;
     --calc-btn-hover: #234271;
     --calc-border: #234271;
-    --calc-card-bg: #1a3354;
-    --calc-card-border: #2c4666;
   }
 }
 
-/* Base typography */
+/* ===== Base ===== */
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--calc-bg);
@@ -132,189 +114,34 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-a {
-  color: var(--calc-link);
-}
+a { color: var(--calc-link); }
 
-.errorNaN {
-  color: var(--calc-error-text);
-  border: solid 1px var(--calc-error-border);
-}
+/* ===== Form controls ===== */
 
-.error-message {
-  color: var(--calc-error-text);
-  font-size: 0.85em;
-  margin-left: 0.4em;
-}
-
-.bioageform .result {
-  font-size: 1.2em;
-  color: var(--calc-accent);
-}
-
-.result-summary {
-  font-size: 0.95em;
-  color: var(--calc-text-muted);
-  line-height: 1.6;
-}
-
-.share-image-note {
-  font-size: 0.85em;
-  color: var(--calc-text-muted);
-  margin: 0.4em 0 0.8em;
-  font-style: italic;
-}
-
-.bioageform select:disabled {
-    appearance: none;
-    border: none;
-    background: none;
-    color: var(--calc-text);
-    padding-right: 0;
-    background-image: none;
-    cursor: default;
-}
-
-/* Biomarker form table */
-.bioageform table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 0.5em 0;
-}
-
-.bioageform th,
-.bioageform td {
-  padding: 4px 0;
-  vertical-align: middle;
-}
-
-.bioageform th {
-  text-align: right;
-  padding-right: 0.8em;
-  font-weight: 500;
-  font-size: 0.95em;
-  width: 40%;
-  white-space: nowrap;
-}
-
-.bioageform th label {
-  cursor: pointer;
-}
-
-.bioageform td:nth-of-type(1) input {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.bioageform td:nth-of-type(2) {
-  width: 9.5em;
-  padding-left: 6px;
-}
-
-.bioageform td:nth-of-type(2) select {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-/* Date of birth and test date section */
-.date-section {
-  margin: 1em 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6em;
-}
-
-.csv-load-row {
-  display: flex;
-  align-items: center;
-  gap: 0.8em;
-  flex-wrap: wrap;
-}
-
-.date-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6em;
-  padding: 0.6em 0.8em;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.date-row > label {
-  font-weight: 500;
-  min-width: 8em;
-}
-
-.age-readout {
-  font-size: 0.85em;
-  color: var(--calc-text-faint);
-}
-
-.age-readout:empty {
-  display: none;
-}
-
-.date-row input[type="date"] {
-  font-size: 1em;
-}
-
-/* Soft info card when a date row needs guidance, escalates to error tone
-   when there's an inline error. Class-toggled in JS so the visual card
-   wraps the inline message that gets injected into it. */
-.date-row.date-row--info {
-  background: var(--calc-info-bg);
-  border-color: var(--calc-info-border);
-}
-
-.date-row.date-row--error {
-  background: var(--calc-error-bg);
-  border-color: var(--calc-error-border);
-}
-
-.date-row .dob-prompt,
-.date-row .input-alert,
-.date-row .error-message {
-  flex-basis: 100%;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: none;
-  font-size: 0.85em;
-}
-
-.date-row .error-message {
-  color: var(--calc-error-text);
-  font-weight: 500;
-}
-
-/* Form inputs */
 input[type="text"],
 input[type="number"],
 input[type="date"],
 select {
   font: inherit;
-  font-size: 1em;
   padding: 0.45em 0.6em;
   background: var(--calc-input-bg);
   color: var(--calc-text);
   border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  border-radius: var(--calc-radius);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="date"]:focus,
+input:focus,
 select:focus {
   outline: none;
   border-color: var(--calc-accent);
   box-shadow: 0 0 0 3px var(--calc-accent-soft);
 }
 
-/* Custom chevron on selects (so they all look uniform regardless of OS) */
+/* Custom chevron so selects look uniform regardless of OS. The disabled
+   variant keeps the same border and dimensions but drops the chevron and
+   fades the text — gives the form a consistent grid even when units can't
+   be changed. */
 select {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -332,7 +159,15 @@ select {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%23eae8e6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
 }
 
-/* Hide spinner controls on number inputs — users will type values, not step. */
+select:disabled {
+  background-image: none;
+  background-color: var(--calc-bg);
+  color: var(--calc-text-faint);
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* No spinner controls on number inputs — users will type values, not step. */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -343,32 +178,86 @@ input[type="number"] {
   appearance: textfield;
 }
 
-/* Range validation states on inputs */
 .input-warning {
-  border-color: #d4a72c;
+  border-color: var(--calc-input-border-warn);
   background: var(--calc-warning-bg);
 }
-
 .input-error {
-  border-color: #c0392b;
+  border-color: var(--calc-input-border-error);
   background: var(--calc-error-bg);
 }
 
-/* Prompt to enter DOB, shown inside the relevant date row */
-.dob-prompt {
-  font-size: 0.9em;
-  color: var(--calc-info-text);
+/* Population-default fills — italicised to signal "we made this up". */
+.default-value {
+  color: var(--calc-text-faint);
+  font-style: italic;
+  background: var(--calc-btn-bg);
 }
 
-.dob-prompt-error {
-  color: var(--calc-error-text);
+/* ===== Buttons (calculator-scoped) =====
+   One look for every button inside the form/save/share areas. Specific
+   variants only adjust size or emphasis. */
+
+#phenoAgeForm button,
+#shareSection button,
+#saveSection button {
+  font: inherit;
+  font-size: 0.95em;
+  padding: 0.4em 1em;
+  cursor: pointer;
+  border: 1px solid var(--calc-input-border);
+  border-radius: var(--calc-radius);
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
+  transition: background 0.15s, border-color 0.15s;
+}
+#phenoAgeForm button:hover:not(:disabled),
+#shareSection button:hover:not(:disabled),
+#saveSection button:hover:not(:disabled) {
+  background: var(--calc-btn-hover);
+  border-color: var(--calc-text-muted);
+}
+#phenoAgeForm button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
-/* Informational alerts attached to form inputs (range warnings/errors).
-   Sit in a tr below the input, span all columns, and visually anchor to the
-   input via the same coloured border. */
-.bioageform .range-alert > td {
-  padding: 0 0 8px;
+/* ===== Biomarker form table ===== */
+
+.bioageform table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.5em 0;
+}
+
+.bioageform th,
+.bioageform td {
+  padding: 4px 0;
+  vertical-align: middle;
+}
+
+.bioageform th {
+  text-align: right;
+  padding-right: 0.8em;
+  font-weight: 700;
+  font-size: 0.95em;
+  width: 40%;
+  white-space: nowrap;
+}
+.bioageform th label { cursor: pointer; }
+
+.bioageform td:first-of-type input { width: 100%; box-sizing: border-box; }
+.bioageform td:nth-of-type(2) { width: 9.5em; padding-left: 6px; }
+.bioageform td:nth-of-type(2) select { width: 100%; box-sizing: border-box; }
+
+/* Range alerts sit in a tr below the input, sharing its border-bottom so
+   the alert visually attaches to the field it describes. */
+.bioageform .range-alert > td { padding: 0 0 8px; }
+.bioageform tr:has(+ .range-alert) input,
+.bioageform tr:has(+ .range-alert) select {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .input-alert {
@@ -379,327 +268,241 @@ input[type="number"] {
   background: var(--calc-warning-bg);
   border: 1px solid var(--calc-warning-border);
   border-top: none;
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 var(--calc-radius) var(--calc-radius);
 }
-
 .input-alert-error {
   color: var(--calc-error-text);
   background: var(--calc-error-bg);
   border-color: var(--calc-error-border);
 }
 
-/* Make the input above an alert visually attach to it (no rounded bottom). */
-.bioageform tr:has(+ .range-alert) input,
-.bioageform tr:has(+ .range-alert) select {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
+/* ===== Date section =====
+   DOB and test-date sit in flex rows that become coloured cards (info /
+   error) when guidance applies, and visually wrap any inline message
+   that gets injected into the row. */
 
-/* Warning banner shown under result when implausible values present */
-.result-warning {
-  margin: 0.8em 0;
-  padding: 0.6em 0.9em;
-  font-size: 0.9em;
-  color: var(--calc-error-text);
-  background: var(--calc-error-bg);
-  border: 1px solid var(--calc-error-border);
-  border-left: 3px solid var(--calc-error-text);
-  border-radius: 4px;
-}
-
-/* Milder result warning (e.g. "very approximate" — a third of values are
-   defaults). Yellow rather than red since it's a heads-up, not an error. */
-.result-warning--mild {
-  color: var(--calc-warning-text);
-  background: var(--calc-warning-bg);
-  border-color: var(--calc-warning-border);
-  border-left-color: var(--calc-warning-text);
-}
-
-/* Severe result warning (most or all values are defaults). Reuses the base
-   red tone but with bold text to flag how unreliable the result is. */
-.result-warning-severe {
-  font-weight: bold;
-}
-
-/* Share card */
-#shareSection {
-  margin-top: 1.5em;
-}
-
-.share-card {
-  width: 100%;
-  max-width: 600px;
-  overflow: hidden;
-  border-radius: 4px;
-}
-
-.share-card-inner {
-  transform-origin: top left;
-}
-
-/* Scale inner 600px card to fit container */
-@media (max-width: 600px) {
-  .share-card-inner {
-    transform: scale(calc(100vw / 640));
-  }
-  .share-card {
-    height: calc(600px * (100vw / 640));
-  }
-}
-
-#shareCardImage {
-  max-width: 600px;
-  border: 1px solid var(--calc-border);
-  border-radius: 4px;
-}
-
-.share-buttons {
-  margin-top: 0.5em;
-}
-
-.share-buttons button {
-  font-size: 1em;
-  padding: 0.4em 1.2em;
-  margin-right: 0.5em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-}
-
-.share-buttons button:hover {
-  background: var(--calc-btn-hover);
-}
-
-/* Default-value styling for population-average-filled inputs */
-.default-value {
-  color: var(--calc-text-faint);
-  font-style: italic;
-  background: var(--calc-btn-bg);
-}
-
-/* Defaults section */
-.defaults-section {
+.date-section {
   margin: 1em 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
 }
 
-.defaults-section button {
-  font: inherit;
-  font-size: 0.95em;
-  padding: 0.5em 1em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-  transition: background 0.15s ease, border-color 0.15s ease;
+.date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.6em 0.8em;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.date-row > label {
+  font-weight: 700;
+  min-width: 8em;
+}
+.date-row.date-row--info {
+  background: var(--calc-info-bg);
+  border-color: var(--calc-info-border);
+}
+.date-row.date-row--error {
+  background: var(--calc-error-bg);
+  border-color: var(--calc-error-border);
 }
 
-.defaults-section button:hover:not(:disabled) {
-  background: var(--calc-btn-hover);
-  border-color: var(--calc-text-muted);
+/* Inline messages inside a date row reset to plain text — the row's
+   coloured background already does the visual work. */
+.date-row .dob-prompt,
+.date-row .input-alert,
+.date-row .error-message {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 0.85em;
+}
+.date-row .error-message {
+  color: var(--calc-error-text);
+  font-weight: 500;
 }
 
-.defaults-section button:disabled {
-  opacity: 0.5;
-  cursor: default;
+.dob-prompt { font-size: 0.9em; color: var(--calc-info-text); }
+.dob-prompt-error { color: var(--calc-error-text); }
+
+.error-message {
+  color: var(--calc-error-text);
+  font-size: 0.85em;
+  margin-left: 0.4em;
 }
 
+.age-readout {
+  font-size: 0.85em;
+  color: var(--calc-text-faint);
+}
+.age-readout:empty { display: none; }
+
+/* CSV upload + storage actions sit on the right of the date section */
+.date-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  align-items: center;
+  margin-top: 0.2em;
+}
+.storage-notice-inline {
+  font-size: 0.85em;
+  color: var(--calc-text-muted);
+}
+.storage-notice-inline a {
+  color: var(--calc-link);
+  text-decoration: underline;
+}
+
+/* ===== Defaults section ===== */
+
+.defaults-section { margin: 1em 0; }
 .defaults-note {
   font-size: 0.8em;
   color: var(--calc-text-faint);
   margin: 0.3em 0 0;
 }
 
-/* Terminal-style status panel — non-field messages collect here so the user
-   has a single, predictable place to look for what just happened. */
+/* ===== Status terminal =====
+   Single panel for all current, non-field-specific messages — defaults
+   warnings, implausible-value summary, awaiting-input states, and one-shot
+   confirmations. Rebuilt from scratch on every calculateResult so it
+   reflects current state, not history. */
+
 .status-terminal {
   margin: 1.2em 0;
   background: var(--calc-terminal-bg);
   border: 1px solid var(--calc-terminal-border);
   border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
   color: var(--calc-terminal-text);
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
-
 .status-terminal__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   padding: 6px 10px;
   background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid var(--calc-terminal-border);
   color: rgba(197, 212, 230, 0.7);
-  font-size: 0.85em;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-
 .status-terminal__body {
   padding: 8px 10px;
-  max-height: 180px;
+  max-height: 220px;
   overflow-y: auto;
   line-height: 1.5;
 }
-
 .status-terminal__line {
   display: flex;
   gap: 6px;
   word-break: break-word;
 }
-
+.status-terminal__line a {
+  color: var(--calc-terminal-link);
+  text-decoration: underline;
+}
 .status-terminal__line::before {
   content: ">";
   color: var(--calc-terminal-prompt);
   flex-shrink: 0;
 }
-
-.status-terminal__line--ok { color: var(--calc-terminal-ok); }
-.status-terminal__line--warn { color: var(--calc-terminal-warn); }
-.status-terminal__line--err { color: var(--calc-terminal-err); }
-
-.status-terminal__line--ok::before { content: "✓"; color: var(--calc-terminal-ok); }
+.status-terminal__line--ok    { color: var(--calc-terminal-ok); }
+.status-terminal__line--warn  { color: var(--calc-terminal-warn); }
+.status-terminal__line--err   { color: var(--calc-terminal-err); }
+.status-terminal__line--ok::before   { content: "✓"; color: var(--calc-terminal-ok); }
 .status-terminal__line--warn::before { content: "!"; color: var(--calc-terminal-warn); }
-.status-terminal__line--err::before { content: "✗"; color: var(--calc-terminal-err); }
+.status-terminal__line--err::before  { content: "✗"; color: var(--calc-terminal-err); }
 
-/* CSV download button */
-.csv-download {
-  font-size: 0.9em;
-  padding: 0.3em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
+/* ===== Share card ===== */
+
+#shareSection { margin-top: 1.5em; }
+
+.share-card {
+  width: 100%;
+  max-width: 600px;
+  overflow: hidden;
+  border-radius: var(--calc-radius);
+}
+.share-card-inner { transform-origin: top left; }
+@media (max-width: 600px) {
+  .share-card-inner { transform: scale(calc(100vw / 640)); }
+  .share-card { height: calc(600px * (100vw / 640)); }
 }
 
-.csv-download:hover,
-.csv-upload:hover {
-  background: var(--calc-btn-hover);
+#shareCardImage {
+  max-width: 600px;
+  border: 1px solid var(--calc-border);
+  border-radius: var(--calc-radius);
 }
 
-.csv-upload {
-  font-size: 0.9em;
-  padding: 0.3em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
+.share-buttons {
+  margin-top: 0.5em;
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
 }
 
-/* localStorage notice */
-.storage-notice {
+.result-summary {
+  font-size: 0.95em;
+  color: var(--calc-text-muted);
+  line-height: 1.6;
+  margin: 0 0 1em;
+}
+.share-image-note {
   font-size: 0.85em;
   color: var(--calc-text-muted);
-  margin: 0.5em 0;
-  padding: 0.4em 0.7em;
-  background: var(--calc-card-bg);
-  border: 1px solid var(--calc-card-border);
-  border-radius: 4px;
+  margin: 0.4em 0 0.8em;
+  font-style: italic;
 }
 
-/* Save your result section */
+/* ===== Save section ===== */
+
 .save-section {
   margin-top: 1.5em;
   padding-top: 1em;
   border-top: 1px solid var(--calc-border);
 }
-
-.save-section h3 {
-  margin: 0 0 0.5em;
-}
-
+.save-section h3 { margin: 0 0 0.5em; }
 .save-section label {
   display: block;
   font-size: 0.9em;
   color: var(--calc-text-muted);
   margin-bottom: 0.3em;
 }
-
 .save-link-row {
   display: flex;
   gap: 0.4em;
   margin-bottom: 0.3em;
 }
-
 .result-link-input {
   flex: 1;
   font-size: 0.85em;
   padding: 0.4em 0.6em;
   border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
+  border-radius: var(--calc-radius);
   background: var(--calc-input-bg);
   color: var(--calc-text);
   min-width: 0;
 }
-
-.result-link-input:focus {
-  outline: 2px solid var(--calc-accent);
-  outline-offset: -1px;
-}
-
-.copy-btn {
-  font-size: 0.85em;
-  padding: 0.4em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-  white-space: nowrap;
-}
-
-.copy-btn:hover {
-  background: var(--calc-btn-hover);
-}
-
-.save-privacy-note {
+.save-privacy-note,
+.save-option-note {
   font-size: 0.8em;
   color: var(--calc-text-faint);
   margin: 0.3em 0 0.8em;
 }
+.save-option { margin-top: 0.8em; }
+.save-buttons { display: flex; gap: 0.5em; flex-wrap: wrap; }
+.save-browser-warning { color: var(--calc-error-text); }
 
-.save-option {
-  margin-top: 0.8em;
-}
+/* ===== Embed link ===== */
 
-.save-option-note {
-  font-size: 0.8em;
-  color: var(--calc-text-faint);
-  margin: 0.3em 0 0;
-}
-
-.save-buttons {
-  display: flex;
-  gap: 0.5em;
-  flex-wrap: wrap;
-}
-
-.save-browser-btn {
-  font-size: 0.9em;
-  padding: 0.3em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-}
-
-.save-browser-btn:hover {
-  background: var(--calc-btn-hover);
-}
-
-.save-browser-warning {
-  color: var(--calc-error-text);
-}
-
-/* Embed / attribution link */
 .embed-link {
   margin-top: 2em;
   padding-top: 1em;
