@@ -224,10 +224,7 @@ function getConversionFactor(test_id, unit) {
 // missing or non-positive.
 function toCanonical(value, unit, test_id, context) {
   var factor = getConversionFactor(test_id, unit);
-  if (factor === null) {
-    console.warn('No conversion found for ' + test_id + ' unit ' + unit);
-    return value;
-  }
+  if (factor === null) return value;
   var raw = value * factor;
 
   var bm = findModelBiomarker(test_id);
@@ -245,10 +242,7 @@ function toCanonical(value, unit, test_id, context) {
 // context contract — returns null if a needed reference is unavailable.
 function fromCanonical(value, targetUnit, test_id, context) {
   var factor = getConversionFactor(test_id, targetUnit);
-  if (factor === null) {
-    console.warn('No conversion found for ' + test_id + ' unit ' + targetUnit);
-    return value;
-  }
+  if (factor === null) return value;
 
   var bm = findModelBiomarker(test_id);
   if (bm && bm.transform && bm.transform.indexOf('percentage_of:') === 0 && targetUnit !== bm.unit) {
@@ -274,10 +268,8 @@ function applyTransform(value, transform, refValues, transformFloor) {
     return Math.log(value);
   }
 
-  // Cross-test transforms like `percentage_of:wbc` are now handled at the
-  // unit-conversion layer (toCanonical/fromCanonical), so they shouldn't
-  // appear here. Warn if one slips through.
-  console.warn('Unknown transform: ' + transform);
+  // Cross-test transforms like `percentage_of:wbc` are handled at the
+  // unit-conversion layer (toCanonical/fromCanonical) and are a no-op here.
   return value;
 }
 
@@ -684,7 +676,6 @@ function calculateResult() {
   if (model.formula === 'mortality_model') {
     result = calculateMortalityModel(rollingTotal, model.constants);
   } else {
-    console.error('Unknown model formula: ' + model.formula);
     return;
   }
 
@@ -843,8 +834,8 @@ function generateShareCard(bioAge, chronAge, acceleration) {
           container.style.display = 'none';
         }
       })
-      .catch(function(err) {
-        console.log('PNG generation failed, HTML card will remain visible:', err);
+      .catch(function() {
+        // PNG generation failed; the HTML card will remain visible.
       });
   }
 }
@@ -1020,8 +1011,8 @@ function nativeShare() {
     title: t('share_native_title'),
     text: t('share_native_text'),
     files: [file]
-  }).catch(function(err) {
-    console.log('Share cancelled or failed:', err);
+  }).catch(function() {
+    // Share cancelled or failed — nothing more to do.
   });
 }
 
@@ -1323,22 +1314,6 @@ function fillMissingWithDefaults() {
   var age = calculateAge(dob, testDate);
   var filled = 0;
 
-  // Build a canonical context as we go: existing user values first, then each
-  // newly filled default. This means a lymphocyte input with an absolute-count
-  // unit selected can convert from its canonical % default once wbc has been
-  // filled (form order puts wbc first).
-  var ctx = { age: age };
-  for (var i = 0; i < formTests.length; i++) {
-    var existingInput = document.getElementById(formTests[i].id);
-    var existingUnitSelect = document.getElementById(formTests[i].id + 'Unit');
-    var existingVal = parseInput(existingInput.value);
-    if (!isNaN(existingVal)) {
-      var existingUnit = existingUnitSelect.options[existingUnitSelect.selectedIndex].text;
-      var existingCanon = toCanonical(existingVal, existingUnit, formTests[i].id, ctx);
-      if (existingCanon != null && !isNaN(existingCanon)) ctx[formTests[i].id] = existingCanon;
-    }
-  }
-
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
     if (input.value !== '') continue; // don't overwrite user values
@@ -1346,22 +1321,29 @@ function fillMissingWithDefaults() {
     var canonicalDefault = getDefaultForAge(age, formTests[i].id);
     if (canonicalDefault == null) continue;
 
-    // Convert from canonical to the currently selected display unit
+    // Defaults from defaults.csv are in canonical units. Switch the unit
+    // selector to canonical so the value can be written without conversion —
+    // avoids round-trip drift for transforms like lymphocyte-as-absolute-count.
+    var testDef = findTestDef(formTests[i].id);
+    var canonicalUnit = testDef && testDef.canonical_unit;
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
-    var selectedUnit = unitSelect.options[unitSelect.selectedIndex].text;
-    var displayVal = fromCanonical(canonicalDefault, selectedUnit, formTests[i].id, ctx);
-    if (displayVal == null || isNaN(displayVal)) continue; // missing dependency
+    if (canonicalUnit) {
+      for (var j = 0; j < unitSelect.options.length; j++) {
+        if (unitSelect.options[j].text === canonicalUnit) {
+          unitSelect.selectedIndex = j;
+          break;
+        }
+      }
+    }
 
-    // Use sensible precision
     var rounded;
-    if (displayVal < 0.1) rounded = displayVal.toPrecision(2);
-    else if (displayVal < 10) rounded = displayVal.toFixed(2);
-    else if (displayVal < 100) rounded = displayVal.toFixed(1);
-    else rounded = displayVal.toFixed(0);
+    if (canonicalDefault < 0.1) rounded = canonicalDefault.toPrecision(2);
+    else if (canonicalDefault < 10) rounded = canonicalDefault.toFixed(2);
+    else if (canonicalDefault < 100) rounded = canonicalDefault.toFixed(1);
+    else rounded = canonicalDefault.toFixed(0);
 
     input.value = rounded;
     input.classList.add('default-value');
-    ctx[formTests[i].id] = canonicalDefault;
     filled++;
   }
 
@@ -1392,22 +1374,8 @@ function downloadCSV() {
     var input = document.getElementById(formTests[i].id);
     var unitSelect = document.getElementById(formTests[i].id + 'Unit');
     var unit = unitSelect.options[unitSelect.selectedIndex].text;
-    var isDefault = input.classList.contains('default-value') ? ' (population default)' : '';
-    lines.push(formTests[i].id + ',' + input.value + isDefault + ',' + unit);
-  }
-
-  // Add result if available
-  var resultEl = document.getElementById('phenoAgeResult');
-  var resultText = resultEl ? resultEl.textContent : '';
-  if (resultText.indexOf('Result:') !== -1) {
-    lines.push('');
-    lines.push('# Result');
-    // Extract the key numbers from the result display
-    var match = resultText.match(/([\d.]+) years \(age acceleration ([+-]?[\d.]+)/);
-    if (match) {
-      lines.push('phenoage,' + match[1] + ',years');
-      lines.push('acceleration,' + match[2] + ',years');
-    }
+    var value = input.classList.contains('default-value') ? 'auto' : input.value;
+    lines.push(formTests[i].id + ',' + value + ',' + unit);
   }
 
   var blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -1507,12 +1475,12 @@ function handleCSVUpload(fileInput) {
           dateInput.value = normaliseDate(value);
           if (dateInput.value) loaded++;
         }
-      } else {
-        // Biomarker value — strip " (population default)" suffix if present
-        var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
+      } else if (value !== 'auto') {
+        // 'auto' marks fields that were filled from population defaults and
+        // shouldn't be re-imported as user data.
         var input = document.getElementById(field);
-        if (input && cleanValue) {
-          input.value = cleanValue;
+        if (input) {
+          input.value = value;
           input.classList.remove('default-value');
           loaded++;
           // Set the matching unit if available
@@ -1599,8 +1567,7 @@ window.onload = function() {
     return loadConfig();
   }).then(function() {
     createFormElements();
-  }).catch(function(err) {
-    console.error('Failed to load config:', err);
+  }).catch(function() {
     document.getElementById('phenoAgeForm').innerHTML =
       '<p>' + t('error_config_failed') + '</p>';
   });
