@@ -83,7 +83,7 @@ biomarker_map <- data.frame(
               "wbc", "lymphocyte", "mcv", "rcdw", "ap"),
   column = c("albumin_gL", "creat_umol", "glucose_mmol", "crp",
              "wbc", "lymph", "mcv", "rdw", "alp"),
-  canonical_unit = c("g/L", "umol/L", "mmol/L", "mg/L",
+  canonical_unit = c("g/L", "umol/L", "mmol/L", "mg/dL",
                      "10^9 cells/L", "%", "fL", "%", "U/L"),
   to_canonical = c(1, 1, 1, 1, 1, 1, 1, 1, 1),
   stringsAsFactors = FALSE

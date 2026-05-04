@@ -254,8 +254,8 @@ function generateShareCard(epiAge) {
           container.style.display = 'none';
         }
       })
-      .catch(function(err) {
-        console.log('PNG generation failed, HTML card will remain visible:', err);
+      .catch(function() {
+        // PNG generation failed; the HTML card will remain visible.
       });
   }
 }
@@ -348,8 +348,8 @@ function nativeShare() {
     title: t('share_native_title'),
     text: t('share_native_text', humanAge),
     files: [file]
-  }).catch(function(err) {
-    console.log('Share cancelled or failed:', err);
+  }).catch(function() {
+    // Share cancelled or failed — nothing more to do.
   });
 }
 
@@ -358,8 +358,7 @@ function nativeShare() {
 window.onload = function() {
   loadStrings('en').then(function() {
     createForm();
-  }).catch(function(err) {
-    console.error('Failed to load strings:', err);
+  }).catch(function() {
     document.getElementById('dogYearsForm').innerHTML =
       '<p>Error loading calculator. Please try refreshing the page.</p>';
   });
