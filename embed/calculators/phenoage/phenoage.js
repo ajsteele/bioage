@@ -1250,12 +1250,9 @@ function createFormElements() {
       }
     }
     if (savedTest) {
-      // If this row was a population-default in the saved state, mark it so
-      // fillAutoValues can fill it in with a freshly-computed average for
-      // the user's current age (rather than restoring whatever number the
-      // saved file had pre-rounded). Both the explicit AUTO_TOKEN and the
-      // legacy isDefault flag are honoured.
-      if (isAutoValue(savedTest.value) || savedTest.isDefault) {
+      if (isAutoValue(savedTest.value)) {
+        // Population-default flag — fillAutoValues will fill it in once the
+        // form is built and the user's age is known.
         input.classList.add('pending-auto');
       } else {
         input.setAttribute('value', savedTest.value);
@@ -1400,11 +1397,24 @@ function showDefaultsMessage(text, type) {
 function updateDefaultsButton() {
   var btn = document.getElementById('defaultsBtn');
   if (!btn) return;
-  var allFilled = formTests.every(function(t) {
-    var input = document.getElementById(t.id);
-    return input && input.value !== '';
-  });
+  var allFilled = true;
+  var defaultCount = 0;
+  for (var i = 0; i < formTests.length; i++) {
+    var input = document.getElementById(formTests[i].id);
+    if (!input) continue;
+    if (input.value === '') allFilled = false;
+    if (input.classList.contains('default-value')) defaultCount++;
+  }
   btn.disabled = allFilled;
+  if (defaultCount > 0) {
+    btn.classList.add('defaults-btn--filled');
+    btn.textContent = defaultCount === 1
+      ? t('defaults_button_filled_one')
+      : t('defaults_button_filled_many', defaultCount);
+  } else {
+    btn.classList.remove('defaults-btn--filled');
+    btn.textContent = t('defaults_button');
+  }
 }
 
 function fillMissingWithDefaults() {
@@ -1653,17 +1663,15 @@ function handleCSVUpload(fileInput) {
           if (dateInput.value) loaded++;
         }
       } else {
-        // Biomarker value. Honour both the new AUTO_TOKEN format and the
-        // legacy " (population default)" suffix from older CSVs.
-        var cleanValue = value ? value.replace(/\s*\(population default\)/, '') : '';
+        // Biomarker value.
         var input = document.getElementById(field);
-        if (input && cleanValue) {
-          if (isAutoValue(cleanValue)) {
+        if (input && value) {
+          if (isAutoValue(value)) {
             input.value = '';
             input.classList.remove('default-value');
             input.classList.add('pending-auto');
           } else {
-            input.value = cleanValue;
+            input.value = value;
             input.classList.remove('default-value');
           }
           loaded++;

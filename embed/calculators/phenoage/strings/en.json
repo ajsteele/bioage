@@ -77,12 +77,11 @@
   "card_aria_label": "Biological age result card: biological age {0}, chronological age {1}, {2}",
 
   "defaults_button": "Fill missing values with population averages for my age",
+  "defaults_button_filled_one": "1 value filled with a population average",
+  "defaults_button_filled_many": "{0} values filled with population averages",
   "defaults_note": "Uses median values from the NHANES\u00a0III population study for your age.",
   "defaults_need_dates": "Please enter your date of birth and test date first.",
   "defaults_need_valid_dates": "Please enter valid dates first.",
-  "defaults_filled": "Filled {0} field{1} with population averages.",
-  "defaults_filled_plural": "s",
-  "defaults_filled_singular": "",
 
   "storage_restored": "Your previous values were restored from this browser\u2019s storage.",
   "storage_clear_link": "Clear saved data",

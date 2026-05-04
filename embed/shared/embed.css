@@ -187,11 +187,14 @@ input[type="number"] {
   background: var(--calc-error-bg);
 }
 
-/* Population-default fills — italicised to signal "we made this up". */
+/* Population-default fills — italic and tinted with the same friendly blue
+   used for the date-of-birth prompt, so they read as "we filled this in for
+   you" rather than as a real entry. */
 .default-value {
-  color: var(--calc-text-faint);
+  color: var(--calc-info-text);
   font-style: italic;
-  background: var(--calc-btn-bg);
+  background: var(--calc-info-bg);
+  border-color: var(--calc-info-border);
 }
 
 /* ===== Buttons (calculator-scoped) =====
@@ -367,6 +370,17 @@ input[type="number"] {
   font-size: 0.8em;
   color: var(--calc-text-faint);
   margin: 0.3em 0 0;
+}
+
+/* When the button has filled some values, show that visually with the same
+   friendly-blue tint as the default values themselves. The button is also
+   disabled at this point — opacity carries that. */
+#defaultsBtn.defaults-btn--filled,
+#defaultsBtn.defaults-btn--filled:disabled {
+  background: var(--calc-info-bg);
+  border-color: var(--calc-info-border);
+  color: var(--calc-info-text);
+  opacity: 0.85;
 }
 
 /* ===== Status terminal =====
