@@ -34,3 +34,5 @@ For privacy reasons, these calculators will never store your data. You can only 
 # Other tools for biomarker calculation
 
 For more detailed analysis of biomarkers using Python, try [Biolearn](https://bio-learn.github.io/)!
+
+For another browser-based PhenoAge calculator derived from this project, with additional validation checks and a public biological-age competition leaderboard, see [Longevity World Cup](https://www.longevityworldcup.com/onboarding/pheno-age.html).
