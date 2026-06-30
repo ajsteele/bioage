@@ -31,11 +31,13 @@ if (is_spinning) {
 #' # Overview
 #'
 #' This script computes normal ranges, plausible ranges, and age-stratified
-#' median defaults for the PhenoAge biological age calculator, using the
+#' mean defaults for the PhenoAge biological age calculator, using the
 #' NHANES III dataset from the BioAge R package. It writes:
 #'
 #' - `config/tests.csv` — updated with data-driven normal and plausible ranges
-#' - `config/defaults.csv` — LOESS-smoothed medians at each integer age (20-84)
+#' - `config/defaults.csv` — LOESS-smoothed means at each integer age (20-84)
+#' - `config/uncertainty.csv` — per-age PhenoAge uncertainty (years, 1 SD) added
+#'   by imputing each marker with its default, used to show a likely range
 #'
 #' ## Methodology
 #'
@@ -43,7 +45,16 @@ if (is_spinning) {
 #' 2. **Plausible ranges** (red error): wider of 0.1th-99.9th percentiles and
 #'    clinical case-report extremes, then tightened to catch unit-confusion errors
 #' 3. **Manual overrides** from `config/overrides.csv` applied last (always win)
-#' 4. **Age defaults**: raw medians at each integer age, LOESS-smoothed
+#' 4. **Age defaults**: population mean at each integer age, LOESS-smoothed.
+#'    Used to impute missing biomarkers. PhenoAge is an affine function of the
+#'    model's linear predictor, so the unbiased imputation for a missing value
+#'    is the one whose model contribution equals the population-mean contribution
+#'    at that age — the arithmetic mean for linear biomarkers, and the geometric
+#'    mean of the floored value for CRP (which the model uses as log(max(CRP,
+#'    0.22))). NB: a fully-defaulted result reflects the average person's
+#'    PhenoAge for their age, which on NHANES III runs a few years below
+#'    chronological age — that is a property of the published model, not the
+#'    defaults.
 
 #+ install-bioage
 if (!requireNamespace("BioAge", quietly = TRUE)) {
@@ -294,11 +305,11 @@ print(results[, c("test_id", "normal_low", "normal_high", "plausible_low", "plau
 
 #' # Age-stratified defaults {.tabset}
 #'
-#' For each biomarker, we compute the raw median at each integer age,
+#' For each biomarker, we compute the population mean at each integer age,
 #' then fit a LOESS smooth. In the report, plots show:
 #'
-#' - **Grey dots**: raw medians at each integer age
-#' - **Blue line**: LOESS-smoothed median
+#' - **Grey dots**: raw mean at each integer age
+#' - **Blue line**: LOESS-smoothed mean
 #' - **Orange band**: 2.5th-97.5th percentile at each age (raw)
 #' - **Red dots**: 97.5th percentile at each age
 
@@ -306,7 +317,16 @@ print(results[, c("test_id", "normal_low", "normal_high", "plausible_low", "plau
 age_range <- 20:84
 ages_all <- floor(NHANES3$age)
 
-medians_df <- data.frame(age = age_range)
+# CRP enters the model as log(max(CRP, 0.22)), so its unbiased default is the
+# geometric mean of the floored value (the value whose log equals the mean of
+# the logs); arithmetic-mean CRP would over-penalise. All other biomarkers are
+# linear in the model, so their unbiased default is the arithmetic mean.
+CRP_FLOOR <- 0.22
+central <- function(v, tid) {
+  if (tid == "crp") exp(mean(log(pmax(v, CRP_FLOOR)))) else mean(v)
+}
+
+defaults_df <- data.frame(age = age_range)
 
 for (i in seq_len(nrow(biomarker_map))) {
   tid <- biomarker_map$test_id[i]
@@ -316,25 +336,89 @@ for (i in seq_len(nrow(biomarker_map))) {
 
   vals <- NHANES3[[col]] * conv
 
-  raw_medians <- sapply(age_range, function(a) {
+  raw_central <- sapply(age_range, function(a) {
     v <- vals[ages_all == a & !is.na(vals)]
-    if (length(v) >= 5) median(v) else NA
+    if (length(v) >= 5) central(v, tid) else NA
   })
 
-  valid <- !is.na(raw_medians)
+  valid <- !is.na(raw_central)
   if (sum(valid) >= 10) {
-    fit <- loess(raw_medians[valid] ~ age_range[valid], span = 0.4)
+    fit <- loess(raw_central[valid] ~ age_range[valid], span = 0.4)
     smoothed <- predict(fit, newdata = data.frame(x = age_range))
     smoothed[!valid & is.na(smoothed)] <- NA
   } else {
-    smoothed <- raw_medians
+    smoothed <- raw_central
   }
 
-  medians_df[[tid]] <- round(smoothed, 4)
+  defaults_df[[tid]] <- round(smoothed, 4)
 
   cat(sprintf("  %s: smoothed %d ages (%.1f-%.1f range)\n",
               tid, sum(!is.na(smoothed)),
               min(smoothed, na.rm = TRUE), max(smoothed, na.rm = TRUE)))
+}
+
+#' # Imputation uncertainty {.tabset}
+#'
+#' When a user leaves a marker blank we fill it with the age default above. That
+#' injects an error into PhenoAge equal to the marker's coefficient times how far
+#' the person's true value sits from the population mean. PhenoAge is affine in
+#' the linear predictor (slope `1 / phenoage_divisor` years per unit of `xb`), so
+#' marker *i*'s imputation error in years is
+#'
+#'   `|coef_i| / divisor * (value_i - mean_i)`,
+#'
+#' whose SD within an age band is `s_i(age) = |coef_i| / divisor * sd(f_i | age)`,
+#' where `f_i` is the model-space value (`log(max(CRP, 0.22))` for CRP, identity
+#' otherwise). We store one such per-age SD per marker here.
+#'
+#' The displayed range combines the markers that were actually defaulted. Because
+#' these biomarkers are very nearly independent once you condition on age (mean
+#' pairwise correlation of the oriented within-age deviations is ~0.04 in NHANES
+#' III), the per-marker variances simply add: the total SD is the quadrature sum
+#' `sqrt(sum s_i^2)` over the defaulted markers — no covariance terms needed. The
+#' calculator does that sum at runtime, so this table is just the 9 per-age SDs.
+
+#+ uncertainty
+# PhenoAge model coefficients and divisor — mirror config/models/phenoage.json.
+# (Kept in sync by hand; the calculator is the source of truth at runtime.)
+coefs <- c(albumin = -0.0336, creatinine = 0.0095, glucose = 0.1953,
+           crp = 0.0954, wbc = 0.0554, lymphocyte = -0.012,
+           mcv = 0.0268, rcdw = 0.3306, ap = 0.0019)
+phenoage_divisor <- 0.090165
+
+# Model-space value f_i: CRP enters as log(max(CRP, floor)); all others identity.
+model_space <- function(v, tid) {
+  if (tid == "crp") log(pmax(v, CRP_FLOOR)) else v
+}
+
+uncertainty_df <- data.frame(age = age_range)
+
+for (i in seq_len(nrow(biomarker_map))) {
+  tid <- biomarker_map$test_id[i]
+  col <- biomarker_map$column[i]
+  conv <- biomarker_map$to_canonical[i]
+
+  vals <- NHANES3[[col]] * conv
+  year_weight <- abs(coefs[[tid]]) / phenoage_divisor
+
+  # Within-age SD of the model-space value, scaled into PhenoAge years.
+  raw_sd <- sapply(age_range, function(a) {
+    v <- vals[ages_all == a & !is.na(vals)]
+    if (length(v) >= 5) year_weight * sd(model_space(v, tid)) else NA
+  })
+
+  valid <- !is.na(raw_sd)
+  if (sum(valid) >= 10) {
+    fit <- loess(raw_sd[valid] ~ age_range[valid], span = 0.4)
+    smoothed <- predict(fit, newdata = data.frame(x = age_range))
+  } else {
+    smoothed <- raw_sd
+  }
+
+  uncertainty_df[[tid]] <- round(smoothed, 4)
+
+  cat(sprintf("  %s: year-SD %.2f-%.2f across ages\n",
+              tid, min(smoothed, na.rm = TRUE), max(smoothed, na.rm = TRUE)))
 }
 
 #+ age-plots, results='asis', fig.height=5, eval=is_spinning
@@ -348,9 +432,9 @@ for (i in seq_len(nrow(biomarker_map))) {
 
   cat(sprintf("\n## %s\n\n", tid))
 
-  raw_medians <- sapply(age_range, function(a) {
+  raw_central <- sapply(age_range, function(a) {
     v <- vals[ages_all == a & !is.na(vals)]
-    if (length(v) >= 5) median(v) else NA
+    if (length(v) >= 5) central(v, tid) else NA
   })
   raw_p025 <- sapply(age_range, function(a) {
     v <- vals[ages_all == a & !is.na(vals)]
@@ -363,9 +447,9 @@ for (i in seq_len(nrow(biomarker_map))) {
   raw_n <- sapply(age_range, function(a) sum(ages_all == a & !is.na(vals)))
 
   ylim <- range(c(raw_p025, raw_p975), na.rm = TRUE)
-  plot(age_range, raw_medians, pch = 16, col = "grey50", cex = 0.8,
+  plot(age_range, raw_central, pch = 16, col = "grey50", cex = 0.8,
        xlab = "Age (years)", ylab = paste0(tid, " (", unit, ")"),
-       main = paste0(tid, " — median and 95% range by age"), ylim = ylim)
+       main = paste0(tid, " — mean and 95% range by age"), ylim = ylim)
 
   valid_band <- !is.na(raw_p025) & !is.na(raw_p975)
   polygon(c(age_range[valid_band], rev(age_range[valid_band])),
@@ -373,9 +457,9 @@ for (i in seq_len(nrow(biomarker_map))) {
           col = rgb(1, 0.65, 0, 0.15), border = NA)
   points(age_range, raw_p975, pch = 4, col = "red", cex = 0.6)
   points(age_range, raw_p025, pch = 4, col = "red", cex = 0.6)
-  lines(age_range, medians_df[[tid]], col = "steelblue", lwd = 2.5)
+  lines(age_range, defaults_df[[tid]], col = "steelblue", lwd = 2.5)
   legend("topright",
-         legend = c("Raw median", "LOESS smooth", "2.5th/97.5th pctile"),
+         legend = c("Raw mean", "LOESS smooth", "2.5th/97.5th pctile"),
          col = c("grey50", "steelblue", "red"),
          pch = c(16, NA, 4), lty = c(NA, 1, NA), lwd = c(NA, 2.5, NA),
          cex = 0.8, bg = "white")
@@ -385,7 +469,7 @@ for (i in seq_len(nrow(biomarker_map))) {
   cat(sprintf("- **N per age**: min %d, median %d, max %d\n",
               min(raw_n), median(raw_n), max(raw_n)))
   cat(sprintf("- **LOESS range**: %.3f - %.3f %s\n\n",
-              min(medians_df[[tid]], na.rm = TRUE), max(medians_df[[tid]], na.rm = TRUE), unit))
+              min(defaults_df[[tid]], na.rm = TRUE), max(defaults_df[[tid]], na.rm = TRUE), unit))
 }
 
 #' # Sample size by age
@@ -399,12 +483,16 @@ barplot(n_per_age, names.arg = age_range, col = "steelblue", border = "white",
 #' # Write output files
 
 #+ write-outputs
-medians_path <- file.path(config_dir, "defaults.csv")
-write.csv(medians_df, medians_path, row.names = FALSE)
-cat("Written:", medians_path, "\n")
+defaults_path <- file.path(config_dir, "defaults.csv")
+write.csv(defaults_df, defaults_path, row.names = FALSE)
+cat("Written:", defaults_path, "\n")
+
+uncertainty_path <- file.path(config_dir, "uncertainty.csv")
+write.csv(uncertainty_df, uncertainty_path, row.names = FALSE)
+cat("Written:", uncertainty_path, "\n")
 
 #+ defaults-preview, eval=is_spinning
-knitr::kable(head(medians_df, 10), caption = "First 10 rows of defaults.csv")
+knitr::kable(head(defaults_df, 10), caption = "First 10 rows of defaults.csv")
 
 #+ write-tests
 tests_csv <- read.csv(file.path(config_dir, "tests.csv"), stringsAsFactors = FALSE)

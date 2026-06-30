@@ -32,6 +32,7 @@
 
   "result_summary": "Your chronological age at the test date was {0} years, and your calculated biological age was {1} years, which means that your risk of death from age-related causes in the coming year is approximately {2}%, or around 1 in {3}.",
   "result_summary_low_risk": "Your chronological age at the test date was {0} years, and your calculated biological age was {1} years, which means that your risk of death from age-related causes in the coming year is around 1 in {2}, which is less than 0.1%.",
+  "result_range": "Because some values were filled in with population averages, your true biological age is probably somewhere between {0} and {1} years.",
   "defaults_warning_one": "This result is approximate: one value is a population average.",
   "defaults_warning_few": "This result is approximate: {0} of {1} values are population averages.",
   "defaults_warning_very": "This result is very approximate: {0} of {1} values are population averages.",

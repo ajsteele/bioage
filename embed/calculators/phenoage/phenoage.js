@@ -3,6 +3,17 @@ var testDefs = [];       // from tests.csv: [{test_id, name, canonical_unit}]
 var conversions = {};    // from conversions.csv: {test_id: [{unit, to_canonical_factor}]}
 var model = null;        // from phenoage.json: full model definition
 var defaults = [];       // from defaults.csv: [{age, albumin, creatinine, ...}]
+var uncertainties = [];  // from uncertainty.csv: per-age imputation year-SD per marker
+
+// Multiplier on the imputation band SD for the displayed range. 1 SD ≈ 68%
+// ("probably between X and Y"); the markers are near-independent within age, so
+// the band is a quadrature sum of per-marker contributions (see uncertainty.csv).
+var IMPUTATION_BAND_Z = 1;
+
+// Below this half-width (years) the range isn't worth showing: the imputed
+// markers barely move the result, and rounding the bounds outward would imply
+// more spread than there really is. The single number stands on its own.
+var IMPUTATION_BAND_MIN = 1;
 
 var anchorUnitsSeparator = ',';
 var anchorKeysSeparator = ';';
@@ -75,12 +86,14 @@ function loadConfig() {
     fetch('config/tests.csv').then(function(r) { return r.text(); }),
     fetch('config/conversions.csv').then(function(r) { return r.text(); }),
     fetch('config/models/phenoage.json').then(function(r) { return r.json(); }),
-    fetch('config/defaults.csv').then(function(r) { return r.text(); })
+    fetch('config/defaults.csv').then(function(r) { return r.text(); }),
+    fetch('config/uncertainty.csv').then(function(r) { return r.text(); })
   ]).then(function(results) {
     var testsCSV = results[0];
     var conversionsCSV = results[1];
     model = results[2];
     var defaultsCSV = results[3];
+    var uncertaintyCSV = results[4];
 
     // Parse tests
     testDefs = parseCSV(testsCSV);
@@ -101,6 +114,15 @@ function loadConfig() {
 
     // Parse defaults into array of {age, test_id: value, ...}
     defaults = parseCSV(defaultsCSV).map(function(row) {
+      var parsed = { age: parseFloat(row.age) };
+      for (var key in row) {
+        if (key !== 'age') parsed[key] = parseFloat(row[key]);
+      }
+      return parsed;
+    }).sort(function(a, b) { return a.age - b.age; });
+
+    // Parse the per-age imputation uncertainty table (same shape as defaults).
+    uncertainties = parseCSV(uncertaintyCSV).map(function(row) {
       var parsed = { age: parseFloat(row.age) };
       for (var key in row) {
         if (key !== 'age') parsed[key] = parseFloat(row[key]);
@@ -191,6 +213,46 @@ function getDefaultForAge(age, test_id) {
   return null;
 }
 
+// Returns the PhenoAge uncertainty (in years, 1 SD) introduced by imputing
+// `test_id` with its population default at a given age. Linearly interpolated
+// from uncertainty.csv, mirroring getDefaultForAge.
+function getUncertaintyForAge(age, test_id) {
+  if (!uncertainties || uncertainties.length === 0) return null;
+  if (age <= uncertainties[0].age) return uncertainties[0][test_id];
+  if (age >= uncertainties[uncertainties.length - 1].age) {
+    return uncertainties[uncertainties.length - 1][test_id];
+  }
+  for (var i = 0; i < uncertainties.length - 1; i++) {
+    if (age >= uncertainties[i].age && age <= uncertainties[i + 1].age) {
+      var t = (age - uncertainties[i].age) / (uncertainties[i + 1].age - uncertainties[i].age);
+      var lo = uncertainties[i][test_id];
+      var hi = uncertainties[i + 1][test_id];
+      if (lo == null || hi == null || isNaN(lo) || isNaN(hi)) return null;
+      return lo + t * (hi - lo);
+    }
+  }
+  return null;
+}
+
+// Imputation uncertainty band on the displayed biological age. Because the
+// PhenoAge markers are near-independent once you condition on age (mean
+// pairwise correlation ≈ 0.04 in NHANES III), the variance contributed by each
+// defaulted marker adds, so the total SD is the quadrature sum of the per-marker
+// year-SDs from uncertainty.csv. Returns whole-year {low, high} bounds centred
+// on phenoAge, or null when nothing was defaulted (an exact result).
+function imputationBand(phenoAge, age, defaultedIds) {
+  if (!defaultedIds || defaultedIds.length === 0) return null;
+  var variance = 0;
+  for (var i = 0; i < defaultedIds.length; i++) {
+    var sd = getUncertaintyForAge(age, defaultedIds[i]);
+    if (sd != null && !isNaN(sd)) variance += sd * sd;
+  }
+  if (variance <= 0) return null;
+  var band = IMPUTATION_BAND_Z * Math.sqrt(variance);
+  if (band <= IMPUTATION_BAND_MIN) return null; // within ±1 yr — not worth a range
+  return { low: Math.floor(phenoAge - band), high: Math.ceil(phenoAge + band) };
+}
+
 // --- Unit conversion engine ---
 
 function findModelBiomarker(test_id) {
@@ -276,24 +338,27 @@ function applyTransform(value, transform, refValues, transformFloor) {
 // --- Model calculation ---
 
 function calculateMortalityModel(rollingTotal, constants) {
-  var tmonths = constants.tmonths;
   var gamma = constants.gamma;
 
-  rollingTotal = rollingTotal + constants.intercept;
+  // xb is the model's linear predictor (the weighted biomarker sum + intercept).
+  var xb = rollingTotal + constants.intercept;
 
-  var mortalityScore = 1 - Math.exp(
-    -Math.exp(rollingTotal) * (Math.exp(gamma * tmonths) - 1) / gamma
-  );
-
+  // PhenoAge is an exact affine function of xb: the exp/ln of the published
+  // mortality-score -> age transform cancel algebraically, leaving
+  //   PhenoAge = phenoage_intercept + (ln(-phenoage_log_coeff * k) + xb) / phenoage_divisor
+  // where k = (exp(gamma * tmonths) - 1) / gamma. Computing it directly (rather
+  // than forming the 120-month mortality score and taking 1 - exp(...)) avoids
+  // catastrophic float cancellation for low-risk users and is simpler.
+  var k = (Math.exp(gamma * constants.tmonths) - 1) / gamma;
   var bioAge = constants.phenoage_intercept +
-    Math.log(constants.phenoage_log_coeff * Math.log(1 - mortalityScore)) /
-    constants.phenoage_divisor;
+    (Math.log(-constants.phenoage_log_coeff * k) + xb) / constants.phenoage_divisor;
 
+  // 12-month mortality risk still needs the Gompertz survival expression.
   var riskOfDeath = 1 - Math.exp(
-    -Math.exp(rollingTotal) * (Math.exp(gamma * 12) - 1) / gamma
+    -Math.exp(xb) * (Math.exp(gamma * 12) - 1) / gamma
   );
 
-  return { bioAge: bioAge, mortalityScore: mortalityScore, riskOfDeath: riskOfDeath };
+  return { bioAge: bioAge, riskOfDeath: riskOfDeath };
 }
 
 // --- URL anchor persistence ---
@@ -700,9 +765,13 @@ function calculateResult() {
 
   // Note if any values are population defaults — graduated warning
   var defaultCount = 0;
+  var defaultedIds = [];
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
-    if (input && input.classList.contains('default-value')) defaultCount++;
+    if (input && input.classList.contains('default-value')) {
+      defaultCount++;
+      defaultedIds.push(formTests[i].id);
+    }
   }
   if (defaultCount > 0) {
     var totalTests = formTests.length;
@@ -744,6 +813,14 @@ function calculateResult() {
     var riskPct = formatSigFigs(riskOfDeath * 100, 2);
     summaryEl.textContent = t('result_summary',
       age.toFixed(1), phenoAge.toFixed(1), riskPct, oneInN);
+  }
+
+  // When some markers were filled with population averages, the single number
+  // overstates how much we actually know. Append a plain-language range derived
+  // from how much imputing those specific markers can move the result.
+  var band = imputationBand(phenoAge, age, defaultedIds);
+  if (band && band.high > band.low) {
+    summaryEl.textContent += ' ' + t('result_range', band.low, band.high);
   }
 
   // 4. Save your result — in its own div below the share card
