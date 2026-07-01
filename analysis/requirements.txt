@@ -1,0 +1,10 @@
+# Dependencies for generate_ranges.py (the R-less generator + HTML report).
+# Install into a virtualenv — see the header of generate_ranges.py.
+#   python3 -m venv analysis/.venv
+#   analysis/.venv/bin/pip install -r analysis/requirements.txt
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+statsmodels>=0.14
+rdata>=0.11
+matplotlib>=3.7

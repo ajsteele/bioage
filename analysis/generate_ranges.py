@@ -11,13 +11,20 @@ self-contained HTML report so the methodology can be reviewed at a glance:
   - config/uncertainty.csv  — per-age PhenoAge uncertainty (years, 1 SD) added
                               by imputing each marker with its default
 
+Setup
+-----
+Needs a Python environment with the dependencies in analysis/requirements.txt
+(numpy, pandas, statsmodels, rdata, matplotlib). Running the system python
+directly will fail with "No module named numpy"; create a virtualenv first:
+
+    python3 -m venv analysis/.venv
+    analysis/.venv/bin/pip install -r analysis/requirements.txt
+
 Usage
 -----
-    python3 analysis/generate_ranges.py            # report only (no file writes)
-    python3 analysis/generate_ranges.py --write     # also overwrite the CSVs
-    python3 analysis/generate_ranges.py --report out.html
-
-Dependencies: numpy, pandas, statsmodels, rdata, matplotlib.
+    analysis/.venv/bin/python analysis/generate_ranges.py           # report only
+    analysis/.venv/bin/python analysis/generate_ranges.py --write    # also write CSVs
+    analysis/.venv/bin/python analysis/generate_ranges.py --report out.html
 
 Data: NHANES III from the BioAge R package. The .rda is fetched once to
 analysis/.cache/ if absent; override with the BIOAGE_NHANES3 env var.
