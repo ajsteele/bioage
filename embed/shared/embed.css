@@ -35,6 +35,38 @@
   src: url('fonts/inter-700.woff2') format('woff2');
 }
 
+/* Result-card faces — self-hosted subsets
+   Figtree by Erik Kennedy; JetBrains Mono by JetBrains
+   Source: Google Fonts. License: SIL Open Font License 1.1
+
+   Subset to latin letters, digits and basic punctuation: they are only ever
+   drawn into the share card's canvas, never used for page text, so the full
+   character set would be dead weight. Both are variable fonts, so one file per
+   family covers every weight the card asks for (Figtree 600/700, JetBrains Mono
+   400/500/700) in 15.7 KB total. Named "… Card" to make clear they are not
+   general-purpose page fonts — the subset has no accented characters.
+
+   Regenerate with:
+     pyftsubset FONT.woff2 --flavor=woff2 --layout-features=kern \
+       --text="$(printf '%s' 0123456789 {a..z} {A..Z} ' .,:;/%-–—−'\''?!()')" \
+       --output-file=NAME-card.woff2 */
+
+@font-face {
+  font-family: 'Figtree Card';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('fonts/figtree-card.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Card';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('fonts/jetbrains-mono-card.woff2') format('woff2');
+}
+
 /* --- Theme: CSS custom properties --- */
 
 :root {
@@ -53,7 +85,8 @@
   --calc-card-bg: #edf3fa;
   --calc-card-border: #d0e3f0;
 
-  /* Semantic colours (don't change with theme) */
+  /* Semantic colours, consumed by the .notice primitive. Overridden per theme
+     below — a light-mode alert palette is unreadable on the dark background. */
   --calc-warning-text: #664d03;
   --calc-warning-bg: #fff3cd;
   --calc-warning-border: #ffecb5;
@@ -66,6 +99,12 @@
   --calc-info-text: #055160;
   --calc-info-bg: #cff4fc;
   --calc-info-border: #b6effb;
+
+  /* Inline figure highlight in results (theme-aware for contrast) */
+  --calc-figure-good: #0f5132;
+
+  /* One duration and easing for every severity fade */
+  --notice-fade: 180ms ease;
 }
 
 /* Dark theme */
@@ -83,6 +122,23 @@
   --calc-border: #3a3a4e;
   --calc-card-bg: #222240;
   --calc-card-border: #3a3a5e;
+
+  /* Notices need dark equivalents too, or they render as pale light-mode
+     blocks on the dark background. */
+  --calc-warning-text: #ffda6a;
+  --calc-warning-bg: #332701;
+  --calc-warning-border: #664d03;
+  --calc-error-text: #ea868f;
+  --calc-error-bg: #2c0b0e;
+  --calc-error-border: #842029;
+  --calc-success-text: #75b798;
+  --calc-success-bg: #051b11;
+  --calc-success-border: #0f5132;
+  --calc-info-text: #6edff6;
+  --calc-info-bg: #032830;
+  --calc-info-border: #055160;
+
+  --calc-figure-good: #5bc198;
 }
 
 /* Auto theme: follows user's OS preference */
@@ -101,6 +157,21 @@
     --calc-border: #3a3a4e;
     --calc-card-bg: #222240;
     --calc-card-border: #3a3a5e;
+
+    --calc-warning-text: #ffda6a;
+    --calc-warning-bg: #332701;
+    --calc-warning-border: #664d03;
+    --calc-error-text: #ea868f;
+    --calc-error-bg: #2c0b0e;
+    --calc-error-border: #842029;
+    --calc-success-text: #75b798;
+    --calc-success-bg: #051b11;
+    --calc-success-border: #0f5132;
+    --calc-info-text: #6edff6;
+    --calc-info-bg: #032830;
+    --calc-info-border: #055160;
+
+    --calc-figure-good: #5bc198;
   }
 }
 
@@ -116,25 +187,137 @@ a {
   color: var(--calc-link);
 }
 
-.errorNaN {
-  color: var(--calc-error-text);
-  border: solid 1px var(--calc-error-border);
-}
-
-.error-message {
-  color: var(--calc-error-text);
-  font-size: 0.85em;
-}
-
 .bioageform .result {
   font-size: 1.2em;
   color: var(--calc-accent);
 }
 
-.result-summary {
-  font-size: 0.95em;
+/* Legacy message style, now used only by the dogyears calculator. PhenoAge has
+   moved to the .notice primitive below; migrate dogyears and delete this. */
+.error-message {
+  color: var(--calc-error-text);
+  font-size: 0.85em;
+}
+
+/* --- The notice primitive ---------------------------------------------------
+   Every user-facing message in the calculator is a .notice: result lines, form
+   validation, prompts, confirmations. Severity travels through four custom
+   properties so the box itself is described exactly once and each level only
+   re-points the variables. --notice-accent is the saturated left bar; the
+   paler --notice-border is the surrounding hairline. Compose a level with an optional context modifier,
+   e.g. `notice notice--warning notice--field`. */
+
+.notice {
+  --notice-text: var(--calc-info-text);
+  --notice-bg: var(--calc-info-bg);
+  --notice-border: var(--calc-info-border);
+  --notice-accent: var(--calc-info-text);
+
+  margin: 0.4em 0;
+  padding: 0.55em 0.8em;
+  border: 1px solid var(--notice-border);
+  border-left: 3px solid var(--notice-accent);
+  border-radius: 4px;
+  background: var(--notice-bg);
+  color: var(--notice-text);
+  line-height: 1.5;
+}
+
+/* Appearing and changing severity both animate on one shared timing, so a
+   flagged row, its input and its notice move as a single object. Declared on
+   the base selectors rather than the flagged ones so the fade is symmetric —
+   scoped to .row-flagged, clearing a value snapped instead of fading out. */
+@media (prefers-reduced-motion: no-preference) {
+  .notice,
+  .bioageform .field-label,
+  .bioageform .field-control,
+  .bioageform .field-aux,
+  .bioageform input {
+    transition: background-color var(--notice-fade),
+                border-color var(--notice-fade),
+                box-shadow var(--notice-fade),
+                color var(--notice-fade);
+  }
+}
+
+/* Severity levels */
+.notice--neutral {
+  --notice-text: var(--calc-text);
+  --notice-bg: var(--calc-card-bg);
+  --notice-border: var(--calc-card-border);
+  --notice-accent: var(--calc-accent);
+}
+
+.notice--success {
+  --notice-text: var(--calc-success-text);
+  --notice-bg: var(--calc-success-bg);
+  --notice-border: var(--calc-success-border);
+  --notice-accent: var(--calc-success-text);
+}
+
+.notice--warning {
+  --notice-text: var(--calc-warning-text);
+  --notice-bg: var(--calc-warning-bg);
+  --notice-border: var(--calc-warning-border);
+  --notice-accent: var(--calc-warning-text);
+}
+
+.notice--error {
+  --notice-text: var(--calc-error-text);
+  --notice-bg: var(--calc-error-bg);
+  --notice-border: var(--calc-error-border);
+  --notice-accent: var(--calc-error-text);
+}
+
+/* Contexts */
+
+/* Attached to a form field. Deliberately the same size as every other notice:
+   at 0.85em the warnings read as quieter than the neutral result text, which is
+   backwards. */
+.notice--field {
+  margin: 0.3em 0 0.2em;
+}
+
+/* Quiet asides (storage notices, footnotes) that shouldn't compete */
+.notice--muted {
+  font-size: 0.85em;
   color: var(--calc-text-muted);
-  line-height: 1.6;
+}
+
+/* The result group: the single result box, with any warnings stacked below. */
+.notice-group {
+  margin: 1.2em 0;
+}
+
+/* All the result figures live in one box rather than one box per sentence —
+   six stacked cards for a single answer read as a wall of alerts. */
+.notice--box {
+  padding: 0.75em 0.9em;
+}
+
+.notice--box p {
+  margin: 0.45em 0 0;
+}
+
+.notice--box p:first-child {
+  margin-top: 0;
+}
+
+/* The biological age leads, set apart from its supporting detail. */
+.notice--box .result-headline {
+  font-size: 1.15em;
+  padding-bottom: 0.5em;
+  margin-bottom: 0.55em;
+  border-bottom: 1px solid var(--notice-border);
+}
+
+/* Emphasised figures within a notice */
+.result-figure {
+  font-weight: 700;
+}
+
+.result-figure-good {
+  color: var(--calc-figure-good);
 }
 
 .share-image-note {
@@ -144,57 +327,221 @@ a {
   font-style: italic;
 }
 
+/* A test with only one possible unit has nothing to choose, so its selector
+   drops the chrome and reads as a plain unit label beside the value. */
 .bioageform select:disabled {
-    appearance: none;
-    border: none;
-    display: inline;
-    background: none;
-    color: var(--calc-text);
+  appearance: none;
+  border-color: transparent;
+  background: none;
+  color: var(--calc-text-muted);
+  padding-left: 0.1em;
 }
 
-/* Date of birth and test date section */
-.date-section {
-  margin-bottom: 1em;
+/* --- The field grid --------------------------------------------------------
+   One grid for the whole form. The two date fields and the nine biomarkers are
+   the same three-column shape — label, control, trailing cell — so they share a
+   single set of columns rather than being two layouts stacked on each other.
+
+   Each row is a .field wrapper set to `display: contents`, so its cells become
+   direct children of the grid while the wrapper still exists for the JS to hang
+   state on (.row-flagged) and to own its notice. */
+
+/* Columns are capped, not fluid. A blood result is three or four characters, so
+   a box that grows to fill the page invites the eye to expect much more than it
+   wants, and leaves the label stranded a long way from the value it names. */
+.field-grid {
+  --field-gutter: 2em;
+
+  display: grid;
+  /* A leading status gutter, then the three capped content columns, then a
+     flexible tail. The tail is what makes a tinted row and its notice run the
+     full width of the embed: stopping at the last control left them looking
+     like a block that had failed to load rather than a deliberate band. */
+  grid-template-columns:
+    var(--field-gutter) minmax(0, 13em) minmax(5em, 11em) minmax(0, 9.5em) minmax(0, 1fr);
+  /* Stretch, not center: a centred cell is only as tall as its own contents, so
+     a tinted row came out shorter than its grid row and left a pale notch above
+     the notice. The cells centre their contents themselves instead. */
+  align-items: stretch;
 }
 
-.csv-load-row {
-  margin-top: 0.3em;
+.field {
+  display: contents;
+}
+
+/* Right-aligned, so every label ends against the field it names: with a ragged
+   left edge the eye still tracks label to input in one move, and the column
+   reads as deliberate rather than as an accident of table defaults. */
+.field-label {
   display: flex;
   align-items: center;
-  gap: 0.8em;
+  justify-content: flex-end;
+  text-align: right;
+  font-weight: 500;
+  padding: 0.35em 0.85em 0.35em 0.7em;
+  line-height: 1.3;
 }
 
-.csv-message {
+.field-control,
+.field-aux {
+  display: flex;
+  align-items: center;
+  padding: 0.35em 0.7em 0.35em 0;
+}
+
+.field-control > *,
+.field-aux > * {
+  width: 100%;
+}
+
+/* The gutter glyph: a tick for a good value, "!" for a fault, "i" for a prompt.
+   Small and centred — it should register at the edge of vision as you work down
+   the form, not compete with the values. */
+/* Flex rather than justify-self: the cell has to fill its column so the row's
+   tint and accent bar cover the whole gutter — justify-self shrinks it to the
+   glyph, and the tint clips to a 5px sliver. */
+.field-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
   font-size: 0.85em;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--calc-text-faint);
+}
+
+.field-status-ok {
   color: var(--calc-success-text);
-}
-
-.csv-message-error {
-  color: var(--calc-error-text);
-}
-
-.date-row {
-  margin-bottom: 0.5em;
-}
-
-.date-row label {
-  display: inline-block;
-  width: 10em;
-  font-weight: bold;
-}
-
-.date-row input[type="date"] {
+  font-weight: 400;
   font-size: 1em;
 }
 
+/* An estimate, not an answer. Deliberately not the success colour — the row is
+   filled, but with a population average the user never supplied. */
+.field-status-estimated {
+  color: var(--calc-text-faint);
+  font-weight: 400;
+  font-size: 1.05em;
+}
+
+.field-status-warning {
+  color: var(--calc-warning-text);
+}
+
+.field-status-error {
+  color: var(--calc-error-text);
+}
+
+.field-status-hint {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  color: var(--calc-accent);
+}
+
+/* A notice belongs to its row and spans the full width beneath it. */
+.field-notice,
+.field-status {
+  grid-column: 1 / -1;
+}
+
+/* Indent past the gutter so the message starts under the label, and the glyph
+   above it has clear air. */
+.field-notice .notice {
+  padding-left: var(--field-gutter);
+}
+
+.field-status:not(:empty) {
+  padding: 0 0.7em 0.3em;
+}
+
+/* Breathing room between the two dates and the blood tests: they are answering
+   different questions, and an undifferentiated run of eleven identical rows
+   gives the eye nowhere to rest. */
+.field-group-end > .field-aux {
+  padding-bottom: 1.1em;
+}
+
+.field-group-end > .field-label,
+.field-group-end > .field-control {
+  padding-bottom: 1.1em;
+}
+
 /* Form inputs */
-input[type="text"],
-input[type="number"],
-input[type="date"],
-select {
+.bioageform input[type="number"],
+.bioageform input[type="date"],
+.bioageform select {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4em 0.55em;
+  border: 1px solid var(--calc-input-border);
+  border-radius: 5px;
+  background: var(--calc-input-bg);
+  color: var(--calc-text);
+}
+
+/* A column of measurements: lining figures keep the digits on a common grid so
+   the values can be scanned down rather than read one at a time. */
+.bioageform input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+.bioageform input:focus-visible,
+.bioageform select:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: 1px;
+  border-color: var(--calc-accent);
+}
+
+input[type="text"] {
   background: var(--calc-input-bg);
   color: var(--calc-text);
   border: 1px solid var(--calc-input-border);
+}
+
+/* Load from CSV shares the trailing column with the unit selectors, so it is
+   sized to sit in it rather than to stand out from it. */
+.field-aux .csv-upload {
+  width: 100%;
+  padding: 0.4em 0.4em;
+  font-size: 0.9em;
+}
+
+/* Stack below the width where a 13em label column starts squeezing the input:
+   label on its own line, then the value and its units side by side. */
+@media (max-width: 34em) {
+  .field-grid {
+    --field-gutter: 1.6em;
+
+    grid-template-columns: var(--field-gutter) minmax(6em, 1fr) minmax(0, 9em);
+  }
+
+  /* The label shares the gutter's line and runs to the right edge; the control
+     and its units take the line below, indented past the gutter. */
+  .field-label {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 0.5em 0.7em 0.1em 0;
+  }
+
+  .field-status-icon {
+    align-items: start;
+    padding-top: 0.8em;
+  }
+
+  .field-group-end > .field-label {
+    padding-bottom: 0.1em;
+  }
+
+  .field-control {
+    grid-column: 2;
+  }
+
+  .field-tail {
+    display: none;
+  }
 }
 
 /* Hide spinner controls on number inputs — users will type values, not step. */
@@ -208,68 +555,99 @@ input[type="number"] {
   appearance: textfield;
 }
 
-/* Range validation states on inputs */
-.input-warning {
-  border: 1px solid var(--calc-warning-border);
-  background: var(--calc-warning-bg);
+/* Range validation states on inputs. The flagged row's tint already carries the
+   severity, so the input keeps its normal background — it stays obviously
+   editable, and stands out against the tint rather than dissolving into it —
+   and takes a border in the notice colour to point at the specific field.
+   The value's text colour is deliberately left alone: recolouring what the user
+   typed hurts legibility for no extra signal.
+
+   Severity comes from the notice--* class the JS applies alongside these, so no
+   colours are repeated here. Needs `.bioageform` to outspecify the
+   `input[type=...]` rule above, which was silently winning before. */
+.bioageform .input-warning,
+.bioageform .input-error {
+  background: var(--calc-input-bg);
+  border: 1px solid var(--notice-accent);
 }
 
-.input-error {
-  border: 1px solid var(--calc-error-border);
-  background: var(--calc-error-bg);
+/* A flagged row and its notice share a tint and an outline and sit flush
+   together, so the pair reads as one block rather than a free-floating message
+   that doesn't say which row it belongs to. Severity comes from the notice--*
+   class the JS applies alongside .row-flagged. */
+.row-flagged > .field-status-icon,
+.row-flagged > .field-label,
+.row-flagged > .field-control,
+.row-flagged > .field-aux,
+.row-flagged > .field-tail {
+  background: var(--notice-bg);
+  box-shadow: inset 0 1px 0 var(--notice-border);
 }
 
-/* Prompt to enter DOB, shown above the biomarker table */
-.dob-prompt {
-  margin: 0.5em 0 1em;
-  padding: 0.6em 0.8em;
-  font-size: 0.95em;
-  color: var(--calc-info-text);
-  background: var(--calc-info-bg);
-  border: 1px solid var(--calc-info-border);
-  border-radius: 4px;
+.row-flagged > .field-status-icon {
+  box-shadow: inset 0 1px 0 var(--notice-border),
+              inset 3px 0 0 var(--notice-accent);
+  border-top-left-radius: 4px;
 }
 
-.dob-prompt-error {
-  color: var(--calc-error-text);
-  background: var(--calc-error-bg);
-  border-color: var(--calc-error-border);
+.row-flagged > .field-tail {
+  box-shadow: inset 0 1px 0 var(--notice-border),
+              inset -1px 0 0 var(--notice-border);
+  border-top-right-radius: 4px;
 }
 
-/* Informational alerts attached to form inputs */
-.input-alert {
-  margin: 0.3em 0 0.2em;
-  padding: 0.5em 0.7em;
-  font-size: 0.85em;
-  color: var(--calc-warning-text);
-  background: var(--calc-warning-bg);
-  border: 1px solid var(--calc-warning-border);
-  border-radius: 4px;
+/* On the stacked layout the label shares its line with the gutter and runs to
+   the right edge, so the top corners and the side borders move to it. */
+@media (max-width: 34em) {
+  .row-flagged > .field-label {
+    border-top-right-radius: 4px;
+    box-shadow: inset 0 1px 0 var(--notice-border),
+                inset -1px 0 0 var(--notice-border);
+  }
+
+  .row-flagged > .field-control {
+    box-shadow: inset 3px 0 0 var(--notice-accent);
+  }
+
+  .row-flagged > .field-aux {
+    box-shadow: inset -1px 0 0 var(--notice-border);
+  }
 }
 
-.input-alert-error {
-  color: var(--calc-error-text);
-  background: var(--calc-error-bg);
-  border-color: var(--calc-error-border);
+/* Merge the notice into the row above it: no gap, no doubled border, and only
+   the bottom corners rounded. */
+.field-notice .notice {
+  margin: 0;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
 }
 
-/* Warning banner shown under result when implausible values present */
-.result-warning {
-  margin: 0.8em 0;
-  padding: 0.6em 0.8em;
-  font-size: 0.9em;
-  color: var(--calc-error-text);
-  background: var(--calc-error-bg);
-  border: 1px solid var(--calc-error-border);
-  border-radius: 4px;
+.notice-collapse > * {
+  margin-top: 0;
 }
 
-/* Severe result warning (many defaults / all defaults) */
-.result-warning-severe {
-  color: var(--calc-warning-text);
-  background: var(--calc-warning-bg);
-  border-color: var(--calc-warning-border);
-  font-weight: bold;
+/* Animating a notice open means it grows the form rather than snapping it,
+   which matters here because the embed reports its height to the host page on
+   every change (see index.html) — an abrupt insert jolts the surrounding page
+   too. */
+@media (prefers-reduced-motion: no-preference) {
+  .notice-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows var(--notice-fade),
+                opacity var(--notice-fade);
+  }
+
+  .notice-collapse > * {
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .field-notice-open.notice-collapse {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
 }
 
 /* Share card */
@@ -277,57 +655,76 @@ input[type="number"] {
   margin-top: 1.5em;
 }
 
-.share-card {
+/* The canvas is the card — there is no DOM copy to keep in step, and no fixed
+   600px box to scale down on small screens, so it just fits its container. */
+.share-card-canvas {
+  display: block;
   width: 100%;
   max-width: 600px;
-  overflow: hidden;
+  height: auto;
   border-radius: 4px;
 }
 
-.share-card-inner {
-  transform-origin: top left;
+/* Before there is a result the card is a preview, not an artefact: hold it back
+   a little so it reads as something waiting to be filled in, and take away the
+   download controls entirely — a greyed-out button next to an empty card is a
+   dead end, not an invitation. */
+.share-section-empty .share-card-canvas {
+  opacity: 0.85;
 }
 
-/* Scale inner 600px card to fit container */
-@media (max-width: 600px) {
-  .share-card-inner {
-    transform: scale(calc(100vw / 640));
-  }
-  .share-card {
-    height: calc(600px * (100vw / 640));
-  }
-}
-
-#shareCardImage {
-  max-width: 600px;
-  border: 1px solid var(--calc-border);
-  border-radius: 4px;
+.share-section-empty .share-buttons,
+.share-section-empty .share-image-note {
+  display: none;
 }
 
 .share-buttons {
   margin-top: 0.5em;
 }
 
+/* Same primitive as .save-btn and .csv-upload — every button on the page that
+   isn't the primary "fill with defaults" action looks the same. */
 .share-buttons button {
-  font-size: 1em;
-  padding: 0.4em 1.2em;
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0.4em 1em;
   margin-right: 0.5em;
   cursor: pointer;
   border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--calc-btn-bg);
   color: var(--calc-text);
 }
 
-.share-buttons button:hover {
+.share-buttons button:hover:not(:disabled) {
   background: var(--calc-btn-hover);
 }
 
-/* Default-value styling for population-average-filled inputs */
-.default-value {
+.share-buttons button:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: 1px;
+}
+
+/* Inputs holding a population average rather than a measurement. They are real
+   values and do feed the result, but they are placeholders standing in for a
+   test the user didn't have — so the field is drawn as provisional: a dashed
+   edge, no solid fill, and the figure set apart from typed ones. Pairs with the
+   "≈" in the row's status gutter.
+
+   The selector needs `input` as well as the class: `.bioageform
+   input[type="number"]` above scores (0,2,1) and would otherwise win, taking
+   the dashed border with it and resetting the italic via its `font: inherit`. */
+.bioageform input.default-value {
   color: var(--calc-text-faint);
   font-style: italic;
-  background: var(--calc-btn-bg);
+  background: var(--calc-input-bg);
+  border: 1px dashed var(--calc-input-border);
+}
+
+/* Typing replaces the estimate, so the field should stop looking provisional
+   the moment it has focus. */
+.bioageform input.default-value:focus-visible {
+  border-style: solid;
 }
 
 /* Defaults section */
@@ -354,81 +751,133 @@ input[type="number"] {
   cursor: default;
 }
 
-.defaults-message {
-  font-size: 0.85em;
-  padding: 0.4em 0.6em;
-  margin: 0.4em 0 0;
-  border-radius: 4px;
-  background: var(--calc-warning-bg);
-  color: var(--calc-warning-text);
-  border: 1px solid var(--calc-warning-border);
-}
-
-.defaults-message.success {
-  background: var(--calc-success-bg);
-  color: var(--calc-success-text);
-  border-color: var(--calc-success-border);
-}
-
 .defaults-note {
   font-size: 0.8em;
   color: var(--calc-text-faint);
   margin: 0.3em 0 0;
 }
 
-/* CSV download button */
-.csv-download {
+/* Loading a CSV and saving one are the same pair of actions in opposite
+   directions, so the button at the top of the form and the one in the save
+   panel share a primitive. See .save-btn. */
+.csv-upload {
+  font: inherit;
   font-size: 0.9em;
-  padding: 0.3em 0.8em;
+  padding: 0.4em 1em;
   cursor: pointer;
   border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--calc-btn-bg);
   color: var(--calc-text);
 }
 
-.csv-download:hover,
 .csv-upload:hover {
   background: var(--calc-btn-hover);
 }
 
-.csv-upload {
-  font-size: 0.9em;
-  padding: 0.3em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
+.csv-upload:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: 1px;
 }
 
-/* localStorage notice */
-.storage-notice {
-  font-size: 0.85em;
-  color: var(--calc-text-muted);
-  margin: 0.5em 0;
-  padding: 0.4em 0.7em;
-  background: var(--calc-card-bg);
-  border: 1px solid var(--calc-card-border);
-  border-radius: 4px;
-}
+/* --- Save your result -------------------------------------------------------
+   A panel on the same surface as the rest of the form, rather than a run of
+   loose buttons under a hairline that read as a different document. The three
+   ways to keep a result are alternatives, so they are a tab set: one privacy
+   caveat on screen at a time, which is the only way any of them gets read. */
 
-/* Save your result section */
 .save-section {
   margin-top: 1.5em;
-  padding-top: 1em;
-  border-top: 1px solid var(--calc-border);
+  padding: 1em 1.1em 1.2em;
+  border: 1px solid var(--calc-border);
+  border-radius: 6px;
+  background: var(--calc-input-bg);
 }
 
 .save-section h3 {
-  margin: 0 0 0.5em;
+  margin: 0 0 0.35em;
+  font-size: 1.05em;
 }
 
-.save-section label {
+.save-intro {
+  margin: 0 0 0.9em;
+  color: var(--calc-text-muted);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.save-tabs {
+  display: flex;
+  gap: 0.25em;
+  border-bottom: 1px solid var(--calc-border);
+  margin-bottom: 0.9em;
+}
+
+.save-tab {
+  font: inherit;
+  font-size: 0.92em;
+  padding: 0.45em 0.9em;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--calc-text-muted);
+  border-bottom: 2px solid transparent;
+  /* Reserve the selected weight so the row doesn't reflow on selection. */
+  margin-bottom: -1px;
+}
+
+.save-tab:hover {
+  color: var(--calc-text);
+}
+
+.save-tab[aria-selected="true"] {
+  color: var(--calc-text);
+  font-weight: 500;
+  border-bottom-color: var(--calc-accent);
+}
+
+.save-tab:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: -2px;
+  border-radius: 3px 3px 0 0;
+}
+
+.save-control-label {
   display: block;
   font-size: 0.9em;
   color: var(--calc-text-muted);
   margin-bottom: 0.3em;
+}
+
+/* Each caveat is specific to its method — a link can be pasted anywhere, a CSV
+   is a file on disk, browser storage persists — so there is no shared wording
+   for them. Only the reassurance above the tabs is common to all three. */
+.save-note {
+  margin: 0.7em 0 0;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--calc-text-muted);
+}
+
+.save-btn {
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0.4em 1em;
+  cursor: pointer;
+  border: 1px solid var(--calc-input-border);
+  border-radius: 5px;
+  background: var(--calc-btn-bg);
+  color: var(--calc-text);
+  white-space: nowrap;
+}
+
+.save-btn:hover {
+  background: var(--calc-btn-hover);
+}
+
+.save-btn:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: 1px;
 }
 
 .save-link-row {
@@ -451,61 +900,6 @@ input[type="number"] {
 .result-link-input:focus {
   outline: 2px solid var(--calc-accent);
   outline-offset: -1px;
-}
-
-.copy-btn {
-  font-size: 0.85em;
-  padding: 0.4em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-  white-space: nowrap;
-}
-
-.copy-btn:hover {
-  background: var(--calc-btn-hover);
-}
-
-.save-privacy-note {
-  font-size: 0.8em;
-  color: var(--calc-text-faint);
-  margin: 0.3em 0 0.8em;
-}
-
-.save-option {
-  margin-top: 0.8em;
-}
-
-.save-option-note {
-  font-size: 0.8em;
-  color: var(--calc-text-faint);
-  margin: 0.3em 0 0;
-}
-
-.save-buttons {
-  display: flex;
-  gap: 0.5em;
-  flex-wrap: wrap;
-}
-
-.save-browser-btn {
-  font-size: 0.9em;
-  padding: 0.3em 0.8em;
-  cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-}
-
-.save-browser-btn:hover {
-  background: var(--calc-btn-hover);
-}
-
-.save-browser-warning {
-  color: var(--calc-error-text);
 }
 
 /* Embed / attribution link */
