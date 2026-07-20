@@ -9,3 +9,4 @@ analysis/*.html
 # Python generator: local virtualenv and downloaded NHANES data cache
 analysis/.venv/
 analysis/.cache/
+analysis/__pycache__/
