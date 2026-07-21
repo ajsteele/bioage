@@ -130,15 +130,18 @@
     <input type="text" id="optMaxWidth" value="800px" oninput="updateEmbed()">
   </div>
 
-  <h2>3. Preview</h2>
-  <iframe id="previewFrame" class="preview-frame" frameborder="0" scrolling="no" height="600" title="Calculator preview"></iframe>
-
-  <h2>4. Copy the embed code</h2>
+  <h2>3. Copy the embed code</h2>
   <div class="snippet-container">
     <textarea id="embedCode" class="snippet-code" readonly></textarea>
     <button class="copy-btn" id="copyBtn" onclick="copySnippet()">Copy</button>
   </div>
   <p class="note">Paste this into your site's HTML where you want the calculator to appear. The iframe resizes automatically to fit its content.</p>
+  <p class="note">Using a CMS? Add an HTML block and paste the code into it — in WordPress it's the “Custom HTML” block, in Squarespace a “Code” block, in Ghost or Substack an “HTML” card. Paste into the HTML block, not the visual/rich-text editor, which can strip the <code>&lt;script&gt;</code> that auto-sizes the calculator.</p>
+
+  <h2>4. Preview</h2>
+  <iframe id="previewFrame" class="preview-frame" frameborder="0" scrolling="no" height="600" title="Calculator preview"></iframe>
+
+  <p class="note">The embed code includes a small link back to our website. Please help The Longevity Initiative grow by leaving it in place — it's how people discover our free calculators.</p>
 
   <footer>
     <a href="https://thelongevityinitiative.org">The Longevity Initiative</a> · <a href="https://github.com/ajsteele/bioage">Source code on GitHub</a>
@@ -203,7 +206,9 @@
         '  title="' + calc.name + ' — The Longevity Initiative"\n' +
         '  loading="lazy"\n' +
         '></iframe>\n' +
-        '<a href="https://thelongevityinitiative.org/calculators/' + calc.path + '/" style="font-size: 0.75em">' + calc.name +' calculator by The Longevity Initiative</a>' +
+        '<p style="margin-top: 4px; padding-top: 0; font-size: 0.75em">' +
+        '<a href="https://thelongevityinitiative.org/calculators/' + calc.id + '">' + calc.name + '</a>' +
+        ' by <a href="https://thelongevityinitiative.org/">The Longevity Initiative</a></p>' +
         '<script>\n' +
         '  window.addEventListener(\'message\', function(e) {\n' +
         '    if (\n' +
