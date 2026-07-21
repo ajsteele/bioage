@@ -209,20 +209,7 @@
         '<p style="margin-top: 4px; padding-top: 0; font-size: 0.75em">' +
         '<a href="https://thelongevityinitiative.org/calculators/' + calc.id + '">' + calc.name + '</a>' +
         ' by <a href="https://thelongevityinitiative.org/">The Longevity Initiative</a></p>' +
-        '<script>\n' +
-        '  window.addEventListener(\'message\', function(e) {\n' +
-        '    if (\n' +
-        '      e.origin === \'' + EMBED_ORIGIN + '\' &&\n' +
-        '      e.data &&\n' +
-        '      e.data.type === \'li-calculator-resize\'\n' +
-        '    ) {\n' +
-        '      var iframe = document.getElementById(\'' + iframeId + '\');\n' +
-        '      if (iframe && iframe.contentWindow === e.source) {\n' +
-        '        iframe.style.height = (e.data.height + 32) + \'px\';\n' +
-        '      }\n' +
-        '    }\n' +
-        '  });\n' +
-        '<\/script>\n' +
+        '<script src="' + EMBED_BASE + 'shared/setup.js" async><\/script>\n' +
         '<!-- / end of ' + calc.name + ' calculator code -->';
     }
 
