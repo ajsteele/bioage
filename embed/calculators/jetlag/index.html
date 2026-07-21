@@ -61,14 +61,21 @@
         });
       }
 
+      // Measure body.scrollHeight (the content), NOT documentElement.scrollHeight:
+      // the root element's scrollHeight is clamped to at least the viewport (iframe)
+      // height, so reporting it creates a feedback loop — the parent grows the iframe,
+      // the viewport grows, the reported height grows, and the iframe expands forever.
+      // body height is auto = content height, independent of the viewport.
       function notifyParentOfHeight() {
         window.parent.postMessage(
-          { type: 'li-calculator-resize', height: document.documentElement.scrollHeight },
+          { type: 'li-calculator-resize', height: document.body.scrollHeight },
           '*'
         );
       }
       if (window.ResizeObserver) {
-        new ResizeObserver(notifyParentOfHeight).observe(document.documentElement);
+        // Observe the content (body), not the viewport (documentElement), so a
+        // parent-driven iframe resize doesn't re-trigger a report.
+        new ResizeObserver(notifyParentOfHeight).observe(document.body);
       }
       window.addEventListener('resize', notifyParentOfHeight);
       document.addEventListener('DOMContentLoaded', notifyParentOfHeight);
