@@ -17,7 +17,8 @@
 
   <link rel="stylesheet" href="../../shared/embed.css">
   <link rel="stylesheet" href="dogyears.css">
-  <script src="../../shared/vendor/modern-screenshot.js"></script>
+  <script src="../../shared/card-kit.js"></script>
+  <script src="share-card.js"></script>
   <script src="dogyears.js"></script>
 </head>
 <body>
@@ -29,26 +30,30 @@
     <noscript>This calculator requires JavaScript to run.</noscript>
   </div>
 
-  <div id="dogYearsResult" class="bioageform"></div>
+  <div id="dogYearsResult"></div>
 
-  <div id="shareSection" style="display: none;">
+  <div id="shareSection">
     <h2 id="shareHeading">Share your result</h2>
-    <div id="photoUploadSection">
-      <label for="dogPhotoInput" class="photo-upload-label" id="photoUploadLabel">
-        <span id="photoUploadText">Add a photo of your dog</span>
-        <span class="photo-upload-hint" id="photoUploadHint">(optional — it will appear on the share card)</span>
-      </label>
-      <input type="file" id="dogPhotoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(this)">
-      <div id="photoPreview" style="display:none;">
-        <img id="photoPreviewImg" alt="Your dog's photo">
-        <button type="button" id="photoRemoveBtn" onclick="removePhoto()">Remove photo</button>
-      </div>
+
+    <div id="toneRow" class="tone-row">
+      <span id="toneLabel" class="tone-label"></span>
+      <div id="toneSwatches" class="tone-swatches"></div>
     </div>
-    <div id="shareCardContainer"></div>
-    <a id="shareCardImageLink" style="display:none;" download="my-dogs-age.png"><img id="shareCardImage" alt="" style="max-width:100%; height:auto; border-radius:4px;"></a>
+
+    <div id="shareCardWrap" class="share-card-wrap">
+      <div id="shareCardContainer"></div>
+      <div id="dogPhotoCircle" class="dog-photo-overlay" tabindex="0" role="button">
+        <span class="photo-add-hint"><span id="photoAddHintText"></span></span>
+        <span class="photo-drag-hint"><span id="photoDragHintText"></span></span>
+      </div>
+      <input type="file" id="dogPhotoInput" accept="image/*" hidden>
+      <button type="button" id="photoRemoveBtn" class="photo-remove-overlay" hidden>&times;</button>
+      <input type="text" id="dogNameInput" class="dog-name-overlay" maxlength="40" autocomplete="off">
+    </div>
+
     <div class="share-buttons">
-      <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
-      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
+      <button id="downloadImageBtn" onclick="downloadShareCard()"></button>
+      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;"></button>
     </div>
     <script>
       if (navigator.share && navigator.canShare) {

@@ -192,13 +192,6 @@ a {
   color: var(--calc-accent);
 }
 
-/* Legacy message style, now used only by the dogyears calculator. PhenoAge has
-   moved to the .notice primitive below; migrate dogyears and delete this. */
-.error-message {
-  color: var(--calc-error-text);
-  font-size: 0.85em;
-}
-
 /* --- The notice primitive ---------------------------------------------------
    Every user-facing message in the calculator is a .notice: result lines, form
    validation, prompts, confirmations. Severity travels through four custom

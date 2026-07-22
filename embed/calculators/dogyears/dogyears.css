@@ -1,126 +1,270 @@
 /* Dog years calculator — page-specific styles */
 
+/* A two-field, single-purpose calculator reads better as one inline sentence
+   — "<input> years, <input> months" — than as two fields each with a label
+   sitting above it, which looked messy for a form this small. Font size is
+   set once on the row at 2em and everything inside inherits it, so the
+   digits and the words stay a matched size instead of the input needing its
+   own oversized override. */
 .age-input-row {
   display: flex;
-  gap: 1.5em;
-  margin: 1em 0;
-}
-
-.age-input-group {
-  display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 0.3em;
+  margin: 1.2em 0;
+  font-size: 2em;
 }
 
-.age-input-group label {
-  font-weight: bold;
-  font-size: 0.95em;
+.age-input-row label {
+  font-weight: 600;
+  color: var(--calc-text-muted);
 }
 
-.age-input-group input {
-  width: 6em;
-  font-size: 1.1em;
-  padding: 0.4em 0.6em;
+/* `input[type="number"]` rather than a bare `input`: embed.css's
+   `.bioageform input[type="number"]` rule sets width:100%, and matches that
+   attribute so it ties this one on specificity — a tie falls to source
+   order, and this file loads after embed.css, so it wins. Without the exact
+   match the fixed width below is silently overridden, back to a full-width
+   input. */
+.age-input-row input[type="number"] {
+  width: 1.7em;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.1;
+  padding: 0.1em 0.15em;
   border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  font-family: inherit;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
   background: var(--calc-input-bg);
   color: var(--calc-text);
 }
 
-.age-input-group input:focus {
+.age-input-row input:focus-visible {
   outline: 2px solid var(--calc-accent);
-  outline-offset: -1px;
+  outline-offset: 1px;
 }
 
-/* Result display */
-.result-card {
-  margin: 1.5em 0;
-  padding: 1.2em 1.5em;
-  background: var(--calc-card-bg);
-  border: 1px solid var(--calc-card-border);
-  border-radius: 8px;
-}
+/* --- Card colour picker -------------------------------------------------- */
 
-.result-main {
-  font-size: 1.4em;
-  font-weight: 600;
-  color: var(--calc-accent);
-  margin: 0 0 0.1em;
-}
-
-.result-sub {
-  font-size: 0.9em;
-  color: var(--calc-text-muted);
-  margin: 0 0 1em;
-}
-
-.result-traditional {
-  margin: 0.5em 0 0.3em;
-  font-size: 0.95em;
-}
-
-.result-difference {
-  font-size: 0.85em;
-  color: var(--calc-text-faint);
-  margin: 0.2em 0 0;
-}
-
-/* Photo upload */
-.photo-upload-label {
-  display: inline-block;
-  padding: 0.5em 1em;
-  border: 2px dashed var(--calc-input-border);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.95em;
-  color: var(--calc-text-muted);
-  transition: border-color 0.15s;
-}
-
-.photo-upload-label:hover {
-  border-color: var(--calc-accent);
-  color: var(--calc-accent);
-}
-
-.photo-upload-hint {
-  display: block;
-  font-size: 0.8em;
-  color: var(--calc-text-faint);
-  margin-top: 0.2em;
-}
-
-#photoPreview {
-  margin: 0.8em 0;
+.tone-row {
   display: flex;
   align-items: center;
-  gap: 1em;
+  gap: 0.7em;
+  margin: 0.8em 0;
 }
 
-#photoPreviewImg {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--calc-border);
-}
-
-#photoRemoveBtn {
+.tone-label {
   font-size: 0.85em;
-  padding: 0.3em 0.8em;
+  color: var(--calc-text-muted);
+}
+
+.tone-swatches {
+  display: flex;
+  gap: 0.5em;
+}
+
+.tone-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
-  border: 1px solid var(--calc-input-border);
-  border-radius: 4px;
-  background: var(--calc-btn-bg);
-  color: var(--calc-text);
-  font-family: inherit;
+  border: 2px solid transparent;
+  background: var(--tone-bg);
+  box-shadow: inset 0 0 0 2px var(--tone-accent);
 }
 
-#photoRemoveBtn:hover {
-  background: var(--calc-btn-hover);
+.tone-swatch:hover {
+  transform: scale(1.08);
 }
 
-/* Share card container — reuse .share-card from embed.css */
-#shareCardContainer {
-  margin: 1em 0;
+.tone-swatch[aria-pressed="true"] {
+  border-color: var(--calc-text);
+}
+
+.tone-swatch:focus-visible {
+  outline: 2px solid var(--calc-accent);
+  outline-offset: 2px;
+}
+
+/* --- The card and its live overlay controls ------------------------------
+   The photo, name and age live directly on the rendered card — clicking or
+   dragging the circle where the card already shows a photo edits that photo,
+   instead of duplicating the same control in a separate box above it. The
+   overlay elements are positioned in percentages of LAYOUT.photo (see
+   dogyears.js's layoutCardOverlays), so they track the canvas at any
+   responsive width without a resize listener. Font sizes use container query
+   units for the same reason, with a fixed-px fallback for browsers that
+   don't support them. */
+
+.share-card-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  container-type: inline-size;
+}
+
+.dog-photo-overlay {
+  position: absolute;
+  z-index: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  /* Let pointerdown start a drag immediately instead of the browser
+     interpreting the gesture as a scroll on touch. */
+  touch-action: none;
+}
+
+.dog-photo-overlay:hover,
+.dog-photo-overlay:focus-visible {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.25);
+  outline: none;
+}
+
+.dog-photo-overlay.has-photo {
+  cursor: grab;
+}
+
+.dog-photo-overlay.dragging {
+  cursor: grabbing;
+}
+
+/* Two mutually-exclusive hints, neither drawn on the canvas — both are
+   guidance for the person filling the form in, not content that belongs in
+   the image they end up sharing (see share-card.js's placeholderIcon note).
+
+   Empty: "Add a photo" sits under the (larger, centred) paw card-kit draws,
+   visible the whole time — a plain circle doesn't read as clickable on its
+   own the way a text input's placeholder does, so this can't be hover-only.
+
+   Has a photo: "Drag to reposition" only on hover/focus, so it doesn't
+   compete with the photo the rest of the time; needs its own dark scrim
+   since an arbitrary uploaded photo might be light enough to wash the text
+   out otherwise, which the plain empty-state circle never has to worry
+   about. */
+.photo-add-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 16%;
+  text-align: center;
+  white-space: pre-line;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  font-size: 13px;
+  font-size: 2.6cqw;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.dog-photo-overlay.has-photo .photo-add-hint {
+  display: none;
+}
+
+.photo-drag-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12%;
+  text-align: center;
+  white-space: pre-line;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  font-size: 2.8cqw;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.dog-photo-overlay.has-photo:hover .photo-drag-hint,
+.dog-photo-overlay.has-photo:focus-visible .photo-drag-hint {
+  opacity: 1;
+}
+
+.photo-remove-overlay {
+  position: absolute;
+  z-index: 2;
+  min-width: 18px;
+  min-height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(10, 10, 15, 0.75);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-size: 2.9cqw;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-remove-overlay[hidden] {
+  display: none;
+}
+
+.photo-remove-overlay:hover {
+  background: rgba(10, 10, 15, 0.92);
+}
+
+.photo-remove-overlay:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+/* `input.` rather than a bare class: embed.css's `input[type="text"]` rule
+   sets a solid background and border with equal-or-higher specificity, which
+   would otherwise win and turn this into an ordinary white box instead of
+   one styled to sit on the card. A visible border/fill at all times (not
+   just on hover) is deliberate — it reads as an editable field the way plain
+   centred text on a dark photo never quite does. This never appears in the
+   downloaded image regardless of how it's styled (the export is the canvas
+   alone), so there's no "looks like UI chrome in a screenshot" trade-off to
+   weigh here — only whether it reads as clickable, which a border settles. */
+/* Typed characters are transparent — the box, the caret and the placeholder
+   are the only things this element itself renders. The actual name is drawn
+   by the canvas underneath (drawPhoto in share-card.js), already redrawn on
+   every keystroke to keep the exported card in sync; painting it a second
+   time here, on top of the first, was showing up as a faint doubled/ghosted
+   copy of the text wherever canvas and DOM text metrics didn't land on
+   exactly the same pixel. */
+input.dog-name-overlay {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 0 0.4em;
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  color: transparent;
+  caret-color: #fff;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  outline: none;
+  cursor: text;
+  font-size: 20px;
+  font-size: 4cqw;
+}
+
+.dog-name-overlay::selection {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.dog-name-overlay::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+input.dog-name-overlay:hover,
+input.dog-name-overlay:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.55);
 }
