@@ -89,6 +89,30 @@ Longevity Initiative site, which embeds `/embed/calculators/<id>/` as an iframe
 and adds explanatory copy. The embed pages carry `<meta name="robots"
 noindex>` and a canonical link so search credits those standalone pages.
 
+### Deploying the picker into WordPress
+
+The `/embed/` **picker** page can live as a WordPress page instead of a static
+file. Upload everything in `dist/` **except `index.html`** to the server's
+`/embed/` path (so `/embed/calculators/…`, `/embed/shared/…`, `/embed/picker.js`
+and `/embed/calculators.json` are static files), and let WordPress own the
+`/embed/` page — the web server's `try_files` would otherwise serve a static
+`index.html` in preference to the WordPress page.
+
+`npm run build` also emits **`dist/embed.wordpress-blocks.html`**: the picker as
+Gutenberg block markup. To use it:
+
+1. Create a page, set its permalink to `/embed/` and title to "Embed a calculator".
+2. In the editor, open **Options ⋮ → Code editor** (Ctrl+Shift+Alt+M), paste the
+   whole file, then switch back to the **Visual editor**.
+
+It expands into native Heading/Paragraph blocks (which inherit your theme) plus
+Custom HTML blocks for the interactive builder — no theme `style.css` edits and
+no per-element inline styles (a small namespaced `.liec-*` stylesheet rides
+along in the trailing block). The `<script>` survives only for users who can
+post unfiltered HTML — administrators on single-site WordPress. The shared
+picker logic loads from `/embed/picker.js`, so future logic changes never need
+re-pasting.
+
 ### Web-server checklist
 
 The build can't set HTTP headers, so configure these where `dist/` is served:

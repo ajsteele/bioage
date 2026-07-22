@@ -19,6 +19,7 @@ import { readFile, writeFile, mkdir, cp, rm, readdir, unlink } from 'node:fs/pro
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import esbuild from 'esbuild';
+import { parse } from 'node-html-parser';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, 'embed');
@@ -90,6 +91,78 @@ async function minifyCssFilesIn(dir) {
   }
 }
 
+// Emit dist/embed.wordpress-blocks.html: the picker as Gutenberg block markup.
+// Pasted once into the WordPress block editor's Code editor, it becomes native
+// Heading/Paragraph blocks (which inherit the theme) plus Custom HTML blocks for
+// the interactive builder — no manual per-block assembly.
+//
+// Prose (headings, plain paragraphs) => core/heading + core/paragraph, with
+// their attributes stripped so they read as clean native blocks. Interactive
+// elements (the chooser, options grid, snippet box, preview iframe, and the
+// JS-toggled error note, identified by carrying an id) => grouped into core/html
+// blocks. A trailing core/html block holds the scoped .liec-* CSS and loads the
+// shared picker.js from the absolute /embed/ URL.
+async function generateWordpressBlocks() {
+  const src = await readFile(join(SRC, 'index.html'), 'utf8');
+  const EMBED_BASE = 'https://thelongevityinitiative.org/embed/';
+
+  // Keep only the leak-free component rules (those referencing a .liec- class);
+  // a WordPress page inherits its theme for everything else.
+  const css = (src.match(/<style>([\s\S]*?)<\/style>/) || [, ''])[1]
+    .replace(/\/\*[\s\S]*?\*\//g, ''); // drop comments so a mention of .liec- can't fool the filter
+  const liecCss = css
+    .split('}')
+    .map((r) => r.trim())
+    .filter((r) => r && r.split('{')[0].includes('.liec-'))
+    .map((r) => r + '}')
+    .join('\n');
+
+  const body = (src.match(/<body>([\s\S]*?)<\/body>/) || [, ''])[1];
+  const root = parse(body, { comment: false });
+
+  const blocks = [];
+  let htmlGroup = [];
+  const flush = () => {
+    if (htmlGroup.length) {
+      blocks.push('<!-- wp:html -->\n' + htmlGroup.join('\n') + '\n<!-- /wp:html -->');
+      htmlGroup = [];
+    }
+  };
+
+  for (const node of root.childNodes) {
+    if (node.nodeType !== 1) continue; // elements only
+    const tag = (node.rawTagName || '').toLowerCase();
+    if (tag === 'h1' || tag === 'script' || tag === 'style') continue; // title / assets handled elsewhere
+
+    // Prose: headings and plain paragraphs (no id => not JS-controlled).
+    const isProse = (tag === 'h2' || tag === 'p') && !node.getAttribute('id');
+    if (isProse) {
+      flush();
+      node.removeAttribute('class');
+      if (tag === 'h2') {
+        node.setAttribute('class', 'wp-block-heading');
+        blocks.push('<!-- wp:heading -->\n' + node.toString() + '\n<!-- /wp:heading -->');
+      } else {
+        blocks.push('<!-- wp:paragraph -->\n' + node.toString() + '\n<!-- /wp:paragraph -->');
+      }
+    } else if (tag === 'footer') {
+      flush();
+      blocks.push('<!-- wp:separator -->\n<hr class="wp-block-separator has-alpha-channel-opacity"/>\n<!-- /wp:separator -->');
+      blocks.push('<!-- wp:paragraph -->\n<p>' + node.innerHTML.trim() + '</p>\n<!-- /wp:paragraph -->');
+    } else {
+      htmlGroup.push(node.toString()); // select, options grid, snippet box, iframe, error note
+    }
+  }
+  flush();
+
+  const assets =
+    '<!-- wp:html -->\n<style>' + (await minifyCSS(liecCss)) + '</style>\n' +
+    '<script src="' + EMBED_BASE + 'picker.js"></script>\n<!-- /wp:html -->';
+  blocks.push(assets);
+
+  await writeFile(join(OUT, 'embed.wordpress-blocks.html'), blocks.join('\n\n') + '\n');
+}
+
 async function build() {
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
@@ -109,9 +182,11 @@ async function build() {
     await writeFile(join(OUT, 'shared', js), await minifyJS(await readFile(join(SRC, 'shared', js), 'utf8')));
   }
 
-  // Picker page: options are built from the manifest at runtime, so only its
-  // inline <script>/<style> need minifying.
+  // Picker page + its (external, shared) logic. The page's own <script> lives
+  // in picker.js so the standalone page and the WordPress block can share it.
   await writeFile(join(OUT, 'index.html'), await minifyInlineHTML(await readFile(join(SRC, 'index.html'), 'utf8')));
+  await writeFile(join(OUT, 'picker.js'), await minifyJS(await readFile(join(SRC, 'picker.js'), 'utf8')));
+  await generateWordpressBlocks();
 
   // Ready calculators.
   for (const c of ready) {
