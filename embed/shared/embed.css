@@ -141,9 +141,6 @@
   --calc-info-bg: #cff4fc;
   --calc-info-border: #b6effb;
 
-  /* Inline figure highlight in results (theme-aware for contrast) */
-  --calc-figure-good: #0f5132;
-
   /* One duration and easing for every severity fade */
   --notice-fade: 180ms ease;
 }
@@ -178,8 +175,6 @@
   --calc-info-text: #6edff6;
   --calc-info-bg: #032830;
   --calc-info-border: #055160;
-
-  --calc-figure-good: #5bc198;
 }
 
 /* Auto theme: follows user's OS preference */
@@ -211,8 +206,6 @@
     --calc-info-text: #6edff6;
     --calc-info-bg: #032830;
     --calc-info-border: #055160;
-
-    --calc-figure-good: #5bc198;
   }
 }
 
@@ -348,10 +341,6 @@ a {
 /* Emphasised figures within a notice */
 .result-figure {
   font-weight: 700;
-}
-
-.result-figure-good {
-  color: var(--calc-figure-good);
 }
 
 .share-image-note {
@@ -503,6 +492,7 @@ a {
 
 /* Form inputs */
 .bioageform input[type="number"],
+.bioageform input[type="text"],
 .bioageform input[type="date"],
 .bioageform select {
   font: inherit;
@@ -516,8 +506,10 @@ a {
 }
 
 /* A column of measurements: lining figures keep the digits on a common grid so
-   the values can be scanned down rather than read one at a time. */
-.bioageform input[type="number"] {
+   the values can be scanned down rather than read one at a time. Biomarker
+   inputs are type="text" (see phenoage.js) but are still numeric data. */
+.bioageform input[type="number"],
+.bioageform input[type="text"] {
   font-variant-numeric: tabular-nums;
 }
 
@@ -560,7 +552,14 @@ input[type="text"] {
     padding: 0.5em 0.7em 0.1em 0;
   }
 
+  /* Spans both lines of the stacked row (the label's and the input's), not
+     just the first: left as a single-row auto-placed cell, its tint and left
+     accent bar (see .row-flagged > .field-status-icon below) stopped after
+     the label line, leaving a gap of bare background beside the input on a
+     flagged row — the bug that showed up as a notice whose left edge didn't
+     reach as far left as the row above it. */
   .field-status-icon {
+    grid-row: span 2;
     align-items: start;
     padding-top: 0.8em;
   }
@@ -639,9 +638,9 @@ input[type="number"] {
                 inset -1px 0 0 var(--notice-border);
   }
 
-  .row-flagged > .field-control {
-    box-shadow: inset 3px 0 0 var(--notice-accent);
-  }
+  /* No left accent of its own here: .field-status-icon now spans both rows
+     (see above), so its accent bar already runs the full height flush with
+     the left edge — a second one at the input's own edge only doubled it up. */
 
   .row-flagged > .field-aux {
     box-shadow: inset -1px 0 0 var(--notice-border);
@@ -717,10 +716,16 @@ input[type="number"] {
 }
 
 /* Same primitive as .save-btn and .csv-upload — every button on the page that
-   isn't the primary "fill with defaults" action looks the same. */
+   isn't the primary "fill with defaults" action looks the same. Icon and label
+   sit inline (see card-kit.js's initShareButtons, which fills the button with
+   a .share-btn-icon + .share-btn-label pair): a bare "Download"/"Share" pair
+   otherwise reads as two identical grey buttons until read closely. */
 .share-buttons button {
   font: inherit;
   font-size: 0.9em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
   padding: 0.4em 1em;
   margin-right: 0.5em;
   cursor: pointer;
@@ -737,6 +742,18 @@ input[type="number"] {
 .share-buttons button:focus-visible {
   outline: 2px solid var(--calc-accent);
   outline-offset: 1px;
+}
+
+.share-btn-icon {
+  display: inline-flex;
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+}
+
+.share-btn-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* Inputs holding a population average rather than a measurement. They are real

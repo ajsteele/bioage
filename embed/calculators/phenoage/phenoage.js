@@ -441,6 +441,16 @@ function createAnchorFromValues(dob, testdate, formTests, values, units) {
   return url;
 }
 
+// The page's own <link rel="canonical"> (see index.html) names the friendly,
+// themed page this embed lives inside — not this bare iframe document — so a
+// result link built from it lands a visitor somewhere with real chrome around
+// it rather than the raw embed. Falls back to this document's own URL (minus
+// any existing fragment) if a canonical tag is ever missing.
+function resultLinkBaseUrl() {
+  var canonical = document.querySelector('link[rel="canonical"]');
+  return (canonical && canonical.href) || window.location.href.split('#')[0];
+}
+
 // --- Input parsing and validation ---
 
 // Decimal separator for the user's locale (most browsers normalise type="number"
@@ -776,9 +786,7 @@ function calculateResult() {
       }
       var msg = t('range_implausible',
         capitalizeFirst(formTests[i].name), pLow, pHigh, selectedUnits[i]);
-      if (suggestedUnit) {
-        msg += ' ' + t('range_suggest_unit', suggestedUnit);
-      }
+      msg += ' ' + (suggestedUnit ? t('range_suggest_unit', suggestedUnit) : t('range_check'));
       attachFieldNotice(formTests[i].id, 'error', msg);
       implausibleNames.push(formTests[i].name);
     } else if (rangeStatus === 'warning') {
@@ -842,18 +850,13 @@ function calculateResult() {
   var legacyNote = document.querySelector('.legacy-note');
   if (legacyNote) legacyNote.remove();
 
+  // dobVal/testdateVal are guaranteed non-empty valid yyyy-mm-dd strings here:
+  // hasDates checked non-empty above, and native <input type="date"> only ever
+  // holds "" or a valid date, never something Date() can't parse.
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
 
-  if (isNaN(dob.getTime())) {
-    attachFieldNotice('dob', 'error', t('error_invalid_date_dob'));
-    errorCount++;
-  }
-  if (isNaN(testDate.getTime())) {
-    attachFieldNotice('testdate', 'error', t('error_invalid_date_testdate'));
-    errorCount++;
-  }
-  if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
+  if (testDate <= dob) {
     attachFieldNotice('testdate', 'error', t('error_test_date_after_dob_detail'));
     errorCount++;
   }
@@ -862,7 +865,7 @@ function calculateResult() {
   // where it is already tomorrow, can make a legitimate "today" look like the
   // future. Nobody benefits from rejecting a date one day out, and anything
   // beyond that is a real typo.
-  if (!isNaN(testDate.getTime()) && testDate > latestAllowedTestDate()) {
+  if (testDate > latestAllowedTestDate()) {
     attachFieldNotice('testdate', 'error', t('error_test_date_future'));
     errorCount++;
   }
@@ -954,10 +957,9 @@ function calculateResult() {
   }
   var totalTests = formTests.length;
 
-  // Emphasise a figure; `tone` ('good'|'alert') tints the number.
-  function figure(value, tone) {
-    return '<strong class="result-figure' +
-      (tone ? ' result-figure-' + tone : '') + '">' + value + '</strong>';
+  // Emphasise a figure within the result box.
+  function figure(value) {
+    return '<strong class="result-figure">' + value + '</strong>';
   }
 
   // Every figure goes inside a single box, with any warnings stacked below it.
@@ -1002,26 +1004,26 @@ function calculateResult() {
       capitalizeFirst(t(noteKey, defaultCount, totalTests)) + '.'));
   }
 
-  // Chronological age and the comparison with it, as one sentence. Younger
-  // reads as good news; older is a result, not a fault, so it is left untinted.
-  // (Tinting it amber is what made a broken "1067 years older" look like a mild
-  // caution.)
+  // Chronological age and the comparison with it, as one sentence. Neither
+  // direction is tinted: older is a result, not a fault, and tinting younger
+  // as "good" implied the reverse for older — which is what made a broken
+  // "1067 years older" look like a mild caution rather than the error it was.
   var accelRounded = Math.round(acceleration);
   var chronoFigure = figure(age.toFixed(1));
   var accelText;
   if (accelRounded < -1) {
-    accelText = t('result_chrono_accel_younger', chronoFigure,
-      figure(Math.abs(accelRounded), 'good'));
+    accelText = t('result_chrono_accel_younger', chronoFigure, figure(Math.abs(accelRounded)));
   } else if (accelRounded > 1) {
     accelText = t('result_chrono_accel_older', chronoFigure, figure(accelRounded));
   } else {
     accelText = t('result_chrono_accel_ontrack', chronoFigure);
   }
-  lines.push('<p>' + accelText + '</p>');
 
   // Risk of death in the coming year. Use a dedicated "less than 0.1%" phrasing
   // for tiny risks — otherwise a healthy 30-year-old sees "0.0050%", which reads
-  // as noise.
+  // as noise. Follows the chronological-age sentence directly, in the same
+  // paragraph, rather than a new line — it is the next clause of the same
+  // thought, not a separate point.
   var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
   var riskText;
   if (riskOfDeath * 100 < 0.1) {
@@ -1030,7 +1032,7 @@ function calculateResult() {
     var riskPct = formatSigFigs(riskOfDeath * 100, 2);
     riskText = t('result_list_risk', figure(riskPct + '%'), figure(t('result_one_in', oneInN)));
   }
-  lines.push('<p>' + riskText + '</p>');
+  lines.push('<p>' + accelText + ' ' + riskText + '</p>');
 
   endFieldNotices();
   warningsDiv.innerHTML = '<div class="notice-group">' +
@@ -1044,24 +1046,17 @@ function calculateResult() {
   if (saveSection) saveSection.style.display = '';
   var linkInput = document.getElementById('resultLink');
   if (linkInput) {
-    linkInput.value = createAnchorFromValues(
+    linkInput.value = resultLinkBaseUrl() + createAnchorFromValues(
       dobVal, testdateVal, formTests, rawValues, selectedUnits);
   }
 }
 
 // --- Share card ---
+// Canvas export (JPEG blob, download link, Web Share API) and the icon/label
+// on the two buttons are shared with every calculator — see card-kit.js's
+// CARD_EXPORT, getShareCanvas, downloadCard, shareCard and initShareButtons.
 
-// Export format for the downloaded/shared card. JPEG rather than PNG because
-// the v3 design is a full-bleed gradient, which PNG cannot compress: the same
-// card is 1216 KB as a PNG and 102 KB at this quality, with no visible
-// difference even on the 19px footer text at 1:1. The destination is social
-// media, which re-encodes to JPEG regardless, so a PNG would be a megabyte
-// spent on an image nobody receives losslessly.
-// Switch to { type: 'image/png', quality: undefined, ext: 'png' } for a
-// lossless download.
-var EXPORT = { type: 'image/jpeg', quality: 0.92, ext: 'jpg' };
-
-var shareCardFilename = 'my-biological-age.' + EXPORT.ext;
+var shareCardFilename = 'my-biological-age.' + CARD_EXPORT.ext;
 
 // The strings the canvas renderer needs, so all the i18n stays on this side and
 // share-card.js knows nothing about the string table.
@@ -1095,19 +1090,6 @@ function badgeTextFor(displayedBio, displayedChrono) {
   return t('card_on_track');
 }
 
-function getShareCanvas() {
-  var container = document.getElementById('shareCardContainer');
-  if (!container) return null;
-  var canvas = container.querySelector('canvas');
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.className = 'share-card-canvas';
-    canvas.setAttribute('role', 'img');
-    container.appendChild(canvas);
-  }
-  return canvas;
-}
-
 // `acceleration` is not a parameter: everything the card says about the gap is
 // derived from the two figures it prints, so they can never contradict.
 function generateShareCard(bioAge, chronAge) {
@@ -1119,10 +1101,7 @@ function generateShareCard(bioAge, chronAge) {
   shareSection.classList.remove('share-section-empty');
 
   var downloadBtn = document.getElementById('downloadImageBtn');
-  if (downloadBtn) {
-    downloadBtn.textContent = t('share_download_image');
-    downloadBtn.disabled = false;
-  }
+  if (downloadBtn) downloadBtn.disabled = false;
   var imageNote = document.getElementById('shareImageNote');
   if (imageNote) imageNote.textContent = t('share_image_note');
 
@@ -1130,7 +1109,7 @@ function generateShareCard(bioAge, chronAge) {
   var flooredChrono = Math.floor(chronAge);
   var badge = badgeTextFor(roundedBio, flooredChrono);
   shareCardFilename = 'my-biological-age-phenoage-' +
-    roundedBio + '-' + flooredChrono + '.' + EXPORT.ext;
+    roundedBio + '-' + flooredChrono + '.' + CARD_EXPORT.ext;
   canvas.setAttribute('aria-label', t('card_aria_label', roundedBio, flooredChrono, badge));
 
   renderShareCard(canvas, {
@@ -1165,39 +1144,15 @@ function showEmptyShareCard() {
   });
 }
 
-// Export the canvas in the configured format. See EXPORT above.
-function shareCardToBlob() {
-  var canvas = getShareCanvas();
-  if (!canvas || !canvas.toBlob) return Promise.resolve(null);
-  return new Promise(function(resolve) {
-    canvas.toBlob(function(blob) { resolve(blob); }, EXPORT.type, EXPORT.quality);
-  });
-}
-
 function downloadShareCard() {
-  shareCardToBlob().then(function(blob) {
-    if (!blob) return;
-    var link = document.createElement('a');
-    link.download = shareCardFilename;
-    link.href = URL.createObjectURL(blob);
-    link.click();
-    URL.revokeObjectURL(link.href);
-  });
+  downloadCard(getShareCanvas(), shareCardFilename);
 }
 
 function nativeShare() {
-  if (!navigator.share) return;
-  shareCardToBlob().then(function(blob) {
-    if (!blob) return;
-    var file = new File([blob], shareCardFilename, { type: EXPORT.type });
-    navigator.share({
-      title: t('share_native_title'),
-      text: t('share_native_text'),
-      files: [file]
-    }).catch(function() {
-      // Share cancelled or failed — nothing more to do.
-    });
-  });
+  // The URL is built from card_url (the same one printed on the card itself),
+  // not hardcoded here, so the two can never drift apart.
+  shareCard(getShareCanvas(), shareCardFilename,
+    t('share_native_title'), t('share_native_text', 'https://' + t('card_url')));
 }
 
 // --- Result link copy / browser save ---
@@ -1305,6 +1260,18 @@ function createFormElements() {
   var formDiv = document.getElementById('phenoAgeForm');
   formDiv.innerHTML = '';
 
+  // Storage notice leads the form: it's context for everything below it (why
+  // the fields are already filled in), so it needs to be read first, not
+  // discovered after scrolling past the whole form.
+  if (fromStorage) {
+    var storageDiv = document.createElement('div');
+    storageDiv.className = noticeClass('neutral', ['muted']);
+    storageDiv.id = 'storageNotice';
+    storageDiv.innerHTML = t('storage_restored') + ' ' +
+      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
+    formDiv.appendChild(storageDiv);
+  }
+
   // One grid holds every row — the two dates and all nine biomarkers — so their
   // labels, inputs and units line up on one set of columns instead of two
   // layouts that happen to sit above each other.
@@ -1368,8 +1335,12 @@ function createFormElements() {
 
   for (var i = 0; i < formTests.length; i++) {
     var input = document.createElement('input');
-    input.setAttribute('type', 'number');
-    input.setAttribute('step', 'any');
+    // Deliberately type="text", not "number": a number input silently clears
+    // itself to "" on invalid entry (pasted text, stray letters), so
+    // error_invalid_number could never actually fire. Text plus inputmode
+    // still gets the numeric keypad on mobile, and parseInput/Number() do the
+    // real validation either way.
+    input.setAttribute('type', 'text');
     input.setAttribute('id', formTests[i].id);
     input.setAttribute('inputmode', 'decimal');
     input.setAttribute('placeholder', t('placeholder'));
@@ -1438,16 +1409,6 @@ function createFormElements() {
   defaultsNote.textContent = t('defaults_note');
   defaultsDiv.appendChild(defaultsNote);
   formDiv.appendChild(defaultsDiv);
-
-  // Storage notice
-  if (fromStorage) {
-    var storageDiv = document.createElement('div');
-    storageDiv.className = noticeClass('neutral', ['muted']);
-    storageDiv.id = 'storageNotice';
-    storageDiv.innerHTML = t('storage_restored') + ' ' +
-      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
-    formDiv.appendChild(storageDiv);
-  }
 
   buildSaveSection();
 
@@ -1907,6 +1868,7 @@ window.onload = function() {
     return loadConfig();
   }).then(function() {
     createFormElements();
+    initShareButtons(t('share_download_image'), t('share_button'));
   }).catch(function() {
     document.getElementById('phenoAgeForm').innerHTML =
       '<p>' + t('error_config_failed') + '</p>';

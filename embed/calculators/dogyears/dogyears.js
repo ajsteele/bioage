@@ -115,7 +115,7 @@ function createForm() {
   document.getElementById('photoDragHintText').textContent =
     t(primaryPointerIsTouch() ? 'photo_drag_hint_touch' : 'photo_drag_hint_mouse');
   document.getElementById('toneLabel').textContent = t('tone_label');
-  document.getElementById('downloadImageBtn').textContent = t('share_download');
+  initShareButtons(t('share_download'), t('share_button'));
 
   // About section
   document.getElementById('aboutHeading').textContent = t('about_heading');
@@ -497,9 +497,11 @@ function initToneSwatches() {
 }
 
 // --- Share card generation ---
+// Canvas export (JPEG blob, download link, Web Share API) and the icon/label
+// on the two buttons are shared with every calculator — see card-kit.js's
+// CARD_EXPORT, getShareCanvas, downloadCard, shareCard and initShareButtons.
 
-var EXPORT = { type: 'image/jpeg', quality: 0.92, ext: 'jpg' };
-var shareCardFilename = 'my-dog.' + EXPORT.ext;
+var shareCardFilename = 'my-dog.' + CARD_EXPORT.ext;
 
 // "Good Dog" -> "good-dog", for the download filename. Apostrophes are
 // dropped rather than turned into a hyphen ("Bella's" -> "bellas", not
@@ -526,20 +528,6 @@ function cardStrings() {
   };
 }
 
-function getShareCanvas() {
-  var container = document.getElementById('shareCardContainer');
-  if (!container) return null;
-  var canvas = container.querySelector('canvas');
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.className = 'share-card-canvas';
-    canvas.setAttribute('role', 'img');
-    container.appendChild(canvas);
-    layoutCardOverlays();
-  }
-  return canvas;
-}
-
 function currentPhotoOpts() {
   return dogPhotoImg
     ? { img: dogPhotoImg, offsetX: dogPhotoOffset.x, offsetY: dogPhotoOffset.y, zoom: dogPhotoZoom }
@@ -547,7 +535,7 @@ function currentPhotoOpts() {
 }
 
 function renderCard(opts) {
-  var canvas = getShareCanvas();
+  var canvas = getShareCanvas(layoutCardOverlays);
   if (!canvas) return;
   opts.tone = selectedTone;
   opts.scale = 2;
@@ -556,11 +544,11 @@ function renderCard(opts) {
 }
 
 function generateShareCard(humanAge) {
-  var canvas = getShareCanvas();
+  var canvas = getShareCanvas(layoutCardOverlays);
   if (!canvas) return;
 
   var namePart = dogName ? slugify(dogName) : '';
-  shareCardFilename = (namePart || 'my-dog') + '-' + humanAge + '-dog-years.' + EXPORT.ext;
+  shareCardFilename = (namePart || 'my-dog') + '-' + humanAge + '-dog-years.' + CARD_EXPORT.ext;
   var ariaLabel = dogName
     ? t('card_aria_label_named', dogName, humanAge)
     : t('card_aria_label', humanAge);
@@ -578,7 +566,7 @@ function generateShareCard(humanAge) {
 // photo/name overlays stay live so a photo or name entered before the age
 // isn't lost or hidden.
 function showEmptyShareCard() {
-  var canvas = getShareCanvas();
+  var canvas = getShareCanvas(layoutCardOverlays);
   if (!canvas) return;
   canvas.setAttribute('aria-label', t('card_aria_label_empty'));
   renderCard({
@@ -593,38 +581,13 @@ function regenerateShareCard() {
   else showEmptyShareCard();
 }
 
-function shareCardToBlob() {
-  var canvas = getShareCanvas();
-  if (!canvas || !canvas.toBlob) return Promise.resolve(null);
-  return new Promise(function(resolve) {
-    canvas.toBlob(function(blob) { resolve(blob); }, EXPORT.type, EXPORT.quality);
-  });
-}
-
 function downloadShareCard() {
-  shareCardToBlob().then(function(blob) {
-    if (!blob) return;
-    var link = document.createElement('a');
-    link.download = shareCardFilename;
-    link.href = URL.createObjectURL(blob);
-    link.click();
-    URL.revokeObjectURL(link.href);
-  });
+  downloadCard(getShareCanvas(layoutCardOverlays), shareCardFilename);
 }
 
 function nativeShare() {
-  if (!navigator.share) return;
-  shareCardToBlob().then(function(blob) {
-    if (!blob) return;
-    var file = new File([blob], shareCardFilename, { type: EXPORT.type });
-    navigator.share({
-      title: t('share_native_title'),
-      text: t('share_native_text', lastHumanAge !== null ? lastHumanAge : ''),
-      files: [file]
-    }).catch(function() {
-      // Share cancelled or failed — nothing more to do.
-    });
-  });
+  shareCard(getShareCanvas(layoutCardOverlays), shareCardFilename,
+    t('share_native_title'), t('share_native_text', lastHumanAge !== null ? lastHumanAge : ''));
 }
 
 // --- Startup ---

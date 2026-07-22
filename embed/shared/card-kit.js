@@ -292,3 +292,124 @@ function drawCoverImage(ctx, img, dx, dy, dw, dh, offsetXPct, offsetYPct, zoom) 
   var sy = dy - overflowH * (offsetYPct / 100);
   ctx.drawImage(img, sx, sy, drawW, drawH);
 }
+
+// --- Exporting the card --------------------------------------------------------
+// Every calculator's canvas leaves the page the same two ways: saved as a file,
+// or handed to the OS share sheet. Both start from the same blob, so that part
+// is shared; a calculator supplies only what's actually its own — which
+// element holds the canvas, the filename, and the share-sheet title/text.
+
+// JPEG rather than PNG: these cards are a full-bleed gradient, which PNG can't
+// compress — the same card runs over 1MB as a PNG and about a tenth of that at
+// this quality, with no visible difference even in a footer's small text. The
+// destination is social media, which re-encodes to JPEG regardless, so a PNG
+// would be a megabyte spent on an image nobody receives losslessly. Switch to
+// { type: 'image/png', quality: undefined, ext: 'png' } for a lossless export.
+var CARD_EXPORT = { type: 'image/jpeg', quality: 0.92, ext: 'jpg' };
+
+// The canvas the share card is drawn on, creating it on first call. `onCreate`
+// (optional) runs once, right after the canvas is inserted — for a calculator
+// that overlays other elements on top of it (e.g. dog years' photo/name
+// controls) and needs to position them relative to it.
+function getShareCanvas(onCreate) {
+  var container = document.getElementById('shareCardContainer');
+  if (!container) return null;
+  var canvas = container.querySelector('canvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.className = 'share-card-canvas';
+    canvas.setAttribute('role', 'img');
+    container.appendChild(canvas);
+    if (onCreate) onCreate(canvas);
+  }
+  return canvas;
+}
+
+function cardToBlob(canvas) {
+  if (!canvas || !canvas.toBlob) return Promise.resolve(null);
+  return new Promise(function(resolve) {
+    canvas.toBlob(function(blob) { resolve(blob); }, CARD_EXPORT.type, CARD_EXPORT.quality);
+  });
+}
+
+function downloadCard(canvas, filename) {
+  return cardToBlob(canvas).then(function(blob) {
+    if (!blob) return;
+    var link = document.createElement('a');
+    link.download = filename;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+}
+
+function shareCard(canvas, filename, title, text) {
+  if (!navigator.share) return Promise.resolve();
+  return cardToBlob(canvas).then(function(blob) {
+    if (!blob) return;
+    var file = new File([blob], filename, { type: CARD_EXPORT.type });
+    return navigator.share({ title: title, text: text, files: [file] }).catch(function() {
+      // Share cancelled or failed — nothing more to do.
+    });
+  });
+}
+
+// --- Download/share button chrome ---------------------------------------------
+// Icons, not just a label: a bare "Download"/"Share" pair reads as two
+// identical grey buttons until read closely. The share icon follows the
+// visitor's own platform, so it matches the share sheet it's about to open
+// rather than some generic third glyph nobody's OS actually uses.
+
+var SHARE_ICON_DOWNLOAD =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>';
+
+// Apple's own share glyph: an upward arrow through the open top of a box.
+var SHARE_ICON_APPLE =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M12 3v12"/><path d="M8 7l4-4 4 4"/>' +
+  '<path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+
+// Android's long-standing share glyph: three nodes joined by two struts.
+var SHARE_ICON_ANDROID =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="18" cy="5" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="19" r="2.4"/>' +
+  '<path d="M8.1 10.9l7.8-4.4M8.1 13.1l7.8 4.4" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round"/></svg>';
+
+// Neither Apple's nor Android's glyph reads as "share" on a platform that owns
+// neither (Windows, desktop Linux) — an arrow escaping a box is the more
+// universal convention there.
+var SHARE_ICON_GENERIC =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>' +
+  '<path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>';
+
+function shareIconMarkup() {
+  var ua = navigator.userAgent || '';
+  if (/Android/.test(ua)) return SHARE_ICON_ANDROID;
+  if (/iPad|iPhone|iPod|Macintosh/.test(ua)) return SHARE_ICON_APPLE;
+  return SHARE_ICON_GENERIC;
+}
+
+function setShareButtonContent(btn, iconSvg, label) {
+  if (!btn) return;
+  btn.innerHTML = '<span class="share-btn-icon">' + iconSvg + '</span>' +
+    '<span class="share-btn-label">' + label + '</span>';
+}
+
+// Wires the icon and label onto the download/share buttons every calculator's
+// share section has (see index.html), and reveals the share button only where
+// the Web Share API actually exists. Call once, after strings load — the
+// buttons' content doesn't depend on the result, so it never needs redoing.
+function initShareButtons(downloadLabel, shareLabel) {
+  setShareButtonContent(document.getElementById('downloadImageBtn'), SHARE_ICON_DOWNLOAD, downloadLabel);
+  var shareBtn = document.getElementById('nativeShareBtn');
+  setShareButtonContent(shareBtn, shareIconMarkup(), shareLabel);
+  if (shareBtn && navigator.share && navigator.canShare) {
+    shareBtn.style.display = '';
+  }
+}

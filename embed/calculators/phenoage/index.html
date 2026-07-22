@@ -34,15 +34,10 @@
   <div id="shareSection" style="display: none;">
     <div id="shareCardContainer"></div>
     <div class="share-buttons">
-      <button id="downloadImageBtn" onclick="downloadShareCard()">Download image</button>
-      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;">Share</button>
+      <button id="downloadImageBtn" onclick="downloadShareCard()"></button>
+      <button id="nativeShareBtn" onclick="nativeShare()" style="display: none;"></button>
     </div>
     <p id="shareImageNote" class="share-image-note"></p>
-    <script>
-      if (navigator.share && navigator.canShare) {
-        document.getElementById('nativeShareBtn').style.display = '';
-      }
-    </script>
   </div>
 
   <div id="saveSection" style="display: none;"></div>

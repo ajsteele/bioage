@@ -37,6 +37,29 @@
     return document.getElementsByTagName('iframe');
   }
 
+  // A calculator's own "copy result link" builds its link from this page's
+  // canonical URL (see phenoage.js's resultLinkBaseUrl), so a saved link's
+  // #dob=...;testdate=...;... fragment arrives on THIS page, not the embed
+  // iframe — fragments never travel with a request, so nothing forwards it on
+  // its own. Copy it onto our own iframe(s) before they load, so reopening a
+  // saved link actually restores the calculator instead of showing it blank.
+  //
+  // `.src` (not getAttribute) is the browser-resolved absolute URL, so a
+  // same-site embed snippet written with a relative path still matches ORIGIN
+  // here. Only touches iframes already pointed at our own origin, and only
+  // those that don't already carry their own fragment — never a third party's
+  // embed sitting on the same host page, and never overwrites a link that
+  // already names its own state.
+  function forwardHashToEmbeds() {
+    if (!window.location.hash) return;
+    var fs = iframes();
+    for (var i = 0; i < fs.length; i++) {
+      var src = fs[i].src;
+      if (src.indexOf(ORIGIN) !== 0 || src.indexOf('#') !== -1) continue;
+      fs[i].src = src + window.location.hash;
+    }
+  }
+
   // Ask each of our embeds to (re)report its height. This handshake is what
   // makes loading async safe: if this script loads *after* an embed has already
   // sent its first height, that message is gone (postMessage doesn't queue for
@@ -73,6 +96,7 @@
   // Prompt a report now, when each frame finishes loading, and once more after
   // the whole page loads — between them these cover every load-order race.
   function init() {
+    forwardHashToEmbeds();
     var fs = iframes();
     for (var i = 0; i < fs.length; i++) fs[i].addEventListener('load', requestHeights);
     requestHeights();
