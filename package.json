@@ -1,0 +1,16 @@
+{
+  "name": "li-calculators",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for The Longevity Initiative's embeddable biological-age calculators.",
+  "license": "CC0-1.0",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "cd embed && python3 -m http.server 8000",
+    "preview": "npm run build && cd dist && python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

@@ -10,3 +10,7 @@ analysis/*.html
 analysis/.venv/
 analysis/.cache/
 analysis/__pycache__/
+
+# Node build tooling and its output
+node_modules/
+dist/

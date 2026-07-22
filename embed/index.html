@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Embed a calculator — The Longevity Initiative</title>
+  <meta name="description" content="Add one of The Longevity Initiative's free biological age calculators to your own website. It runs entirely in the visitor's browser — no data ever leaves the page.">
+  <link rel="icon" href="shared/assets/favicon.svg" type="image/svg+xml">
   <!-- For the Inter @font-face rules; this page's own styles follow and win. -->
   <link rel="stylesheet" href="shared/embed.css">
   <style>
@@ -111,11 +113,14 @@
   <p>Add one of our biological age calculators to your website. The calculator runs entirely in the visitor's browser — no data is sent to any server.</p>
 
   <h2>1. Choose a calculator</h2>
+  <!-- Options are populated from calculators.json at runtime. The deployed
+       manifest lists only ready calculators, so nothing unfinished appears. -->
   <select id="calculatorSelect" class="calculator-select" onchange="updateEmbed()">
-    <option value="phenoage" data-name="PhenoAge biological age calculator" data-path="calculators/phenoage/">PhenoAge — biological age from blood biomarkers</option>
-    <option value="dogyears" data-name="Dog age calculator" data-path="calculators/dogyears/">Dog years — epigenetic dog-to-human age</option>
-    <option value="jetlag" data-name="Jet lag clock" data-path="calculators/jetlag/">Jet lag clock — circadian light-exposure timing</option>
+    <option>Loading…</option>
   </select>
+  <p class="note" id="calcLoadError" style="display:none; color:#842029;">
+    Couldn't load the calculator list — please refresh the page.
+  </p>
 
   <h2>2. Options</h2>
   <div class="options-grid">
@@ -151,13 +156,16 @@
     var EMBED_ORIGIN = 'https://thelongevityinitiative.org';
     var EMBED_BASE = EMBED_ORIGIN + '/embed/';
 
-    // Pre-select calculator from URL hash (e.g. /embed/#calculators/phenoage)
+    // Pre-select a calculator from the URL hash (e.g. /embed/#phenoage). Match
+    // the hash *exactly* against each option's anchor (its id by default), so
+    // adding calculators later can't accidentally collide the way the old
+    // substring match on the path could.
     function preselectFromHash() {
       var hash = window.location.hash.replace(/^#\/?/, '');
       if (!hash) return;
       var select = document.getElementById('calculatorSelect');
       for (var i = 0; i < select.options.length; i++) {
-        if (select.options[i].getAttribute('data-path').indexOf(hash) !== -1) {
+        if (select.options[i].getAttribute('data-anchor') === hash) {
           select.selectedIndex = i;
           break;
         }
@@ -214,6 +222,8 @@
     }
 
     function updateEmbed() {
+      var select = document.getElementById('calculatorSelect');
+      if (!select.options.length || !select.options[select.selectedIndex].getAttribute('data-path')) return;
       var calc = getSelectedCalculator();
       var snippet = generateSnippet(calc);
       document.getElementById('embedCode').value = snippet;
@@ -254,13 +264,43 @@
       }
     });
 
-    // Initialise
-    preselectFromHash();
-    window.addEventListener('hashchange', function() {
+    // Populate the <select> from the manifest. In the deployed build the
+    // manifest already contains only ready calculators; the `ready` filter
+    // makes local development (which serves the full manifest) behave the same.
+    function buildOptions(calculators) {
+      var select = document.getElementById('calculatorSelect');
+      select.innerHTML = '';
+      calculators.filter(function(c) { return c.ready; }).forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.setAttribute('data-name', c.name);
+        opt.setAttribute('data-path', c.path);
+        opt.setAttribute('data-anchor', c.anchor || c.id);
+        opt.textContent = c.label;
+        select.appendChild(opt);
+      });
+      return select.options.length;
+    }
+
+    function init() {
       preselectFromHash();
       updateEmbed();
-    });
-    updateEmbed();
+      window.addEventListener('hashchange', function() {
+        preselectFromHash();
+        updateEmbed();
+      });
+    }
+
+    fetch('calculators.json')
+      .then(function(r) { return r.json(); })
+      .then(function(calculators) {
+        if (!buildOptions(calculators)) throw new Error('no ready calculators');
+        init();
+      })
+      .catch(function() {
+        document.getElementById('calculatorSelect').style.display = 'none';
+        document.getElementById('calcLoadError').style.display = '';
+      });
   </script>
 </body>
 </html>
