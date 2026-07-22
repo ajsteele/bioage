@@ -1,7 +1,12 @@
-/* Inter — self-hosted subset (latin)
-   Weights: 300 (light), 400 (regular), 500 (medium), 700 (bold)
-   Source: Google Fonts, Inter v18 by Rasmus Andersson
-   License: SIL Open Font License 1.1 */
+/* Inter — self-hosted subset, split by Unicode range so each page downloads
+   only what it renders. Weights 300/400/500/700, each in two files:
+     - `latin` (Latin-1): English plus Western-European accents — ä ö ü ß é ç ñ
+       — so German, French, Spanish, Italian, etc. all resolve from this file,
+       which loads for essentially every page.
+     - `latin-ext` (Latin Extended-A/B): Polish, Czech, Turkish, Baltic,
+       Vietnamese, … The browser fetches these only when a page uses such glyphs.
+   Source: Inter 4.001 by Rasmus Andersson (Google Fonts). License: OFL 1.1.
+   Regenerate with analysis/generate_fonts.sh. */
 
 @font-face {
   font-family: 'Inter';
@@ -9,6 +14,15 @@
   font-weight: 300;
   font-display: swap;
   src: url('fonts/inter-300.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('fonts/inter-300-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
 @font-face {
@@ -17,6 +31,15 @@
   font-weight: 400;
   font-display: swap;
   src: url('fonts/inter-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/inter-400-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
 @font-face {
@@ -25,6 +48,15 @@
   font-weight: 500;
   font-display: swap;
   src: url('fonts/inter-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/inter-500-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
 @font-face {
@@ -33,23 +65,32 @@
   font-weight: 700;
   font-display: swap;
   src: url('fonts/inter-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/inter-700-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
 /* Result-card faces — self-hosted subsets
-   Figtree by Erik Kennedy; JetBrains Mono by JetBrains
+   Figtree 2.002 by Erik Kennedy; JetBrains Mono 2.211 by JetBrains
    Source: Google Fonts. License: SIL Open Font License 1.1
 
-   Subset to latin letters, digits and basic punctuation: they are only ever
-   drawn into the share card's canvas, never used for page text, so the full
-   character set would be dead weight. Both are variable fonts, so one file per
-   family covers every weight the card asks for (Figtree 600/700, JetBrains Mono
-   400/500/700) in 15.7 KB total. Named "… Card" to make clear they are not
-   general-purpose page fonts — the subset has no accented characters.
+   Only ever drawn into the share card's canvas, never used for page text. Kept
+   as a single combined file per family (both are variable, so one file covers
+   every weight the card asks for — Figtree 600/700, JetBrains Mono 400/500/700).
+   Unlike the page's Inter, these are NOT split by Unicode range: canvas would
+   need the text passed to document.fonts.load() to fetch the right split, and a
+   card draws user-supplied text (e.g. a dog's name) whose glyphs aren't known up
+   front — so a single file that covers all of Latin (incl. accents) is simplest.
 
-   Regenerate with:
-     pyftsubset FONT.woff2 --flavor=woff2 --layout-features=kern \
-       --text="$(printf '%s' 0123456789 {a..z} {A..Z} ' .,:;/%-–—−'\''?!()')" \
-       --output-file=NAME-card.woff2 */
+   Subset to latin + latin-ext, matching the Inter ranges above, so accented
+   names (José, Łukasz) and translated card strings render in-family rather than
+   falling back to a system font. Regenerate with analysis/generate_fonts.sh. */
 
 @font-face {
   font-family: 'Figtree Card';
