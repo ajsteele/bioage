@@ -1,0 +1,23 @@
+[
+  {
+    "id": "phenoage",
+    "ready": true,
+    "name": "PhenoAge biological age calculator",
+    "label": "PhenoAge — biological age from blood biomarkers",
+    "path": "calculators/phenoage/"
+  },
+  {
+    "id": "dogyears",
+    "ready": true,
+    "name": "Dog age calculator",
+    "label": "Dog years — epigenetic dog-to-human age",
+    "path": "calculators/dogyears/"
+  },
+  {
+    "id": "jetlag",
+    "ready": false,
+    "name": "Jet lag clock",
+    "label": "Jet lag clock — circadian light-exposure timing",
+    "path": "calculators/jetlag/"
+  }
+]

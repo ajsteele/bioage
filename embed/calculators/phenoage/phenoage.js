@@ -3,6 +3,18 @@ var testDefs = [];       // from tests.csv: [{test_id, name, canonical_unit}]
 var conversions = {};    // from conversions.csv: {test_id: [{unit, to_canonical_factor}]}
 var model = null;        // from phenoage.json: full model definition
 var defaults = [];       // from defaults.csv: [{age, albumin, creatinine, ...}]
+var uncertainties = [];  // from uncertainty.csv: per-age imputation year-SD per marker
+var bounds = null;       // from bounds.csv: {accelLow, accelHigh} in years
+
+// Multiplier on the imputation band SD for the displayed range. 1 SD ≈ 68%
+// ("probably between X and Y"); the markers are near-independent within age, so
+// the band is a quadrature sum of per-marker contributions (see uncertainty.csv).
+var IMPUTATION_BAND_Z = 1;
+
+// Below this half-width (years) the range isn't worth showing: the imputed
+// markers barely move the result, and rounding the bounds outward would imply
+// more spread than there really is. The single number stands on its own.
+var IMPUTATION_BAND_MIN = 1;
 
 var anchorUnitsSeparator = ',';
 var anchorKeysSeparator = ';';
@@ -75,12 +87,16 @@ function loadConfig() {
     fetch('config/tests.csv').then(function(r) { return r.text(); }),
     fetch('config/conversions.csv').then(function(r) { return r.text(); }),
     fetch('config/models/phenoage.json').then(function(r) { return r.json(); }),
-    fetch('config/defaults.csv').then(function(r) { return r.text(); })
+    fetch('config/defaults.csv').then(function(r) { return r.text(); }),
+    fetch('config/uncertainty.csv').then(function(r) { return r.text(); }),
+    fetch('config/bounds.csv').then(function(r) { return r.text(); })
   ]).then(function(results) {
     var testsCSV = results[0];
     var conversionsCSV = results[1];
     model = results[2];
     var defaultsCSV = results[3];
+    var uncertaintyCSV = results[4];
+    var boundsCSV = results[5];
 
     // Parse tests
     testDefs = parseCSV(testsCSV);
@@ -107,6 +123,24 @@ function loadConfig() {
       }
       return parsed;
     }).sort(function(a, b) { return a.age - b.age; });
+
+    // Parse the per-age imputation uncertainty table (same shape as defaults).
+    uncertainties = parseCSV(uncertaintyCSV).map(function(row) {
+      var parsed = { age: parseFloat(row.age) };
+      for (var key in row) {
+        if (key !== 'age') parsed[key] = parseFloat(row[key]);
+      }
+      return parsed;
+    }).sort(function(a, b) { return a.age - b.age; });
+
+    // Plausibility bounds for the finished result (one row, in years).
+    var boundsRow = parseCSV(boundsCSV)[0];
+    if (boundsRow) {
+      bounds = {
+        accelLow: parseFloat(boundsRow.accel_low),
+        accelHigh: parseFloat(boundsRow.accel_high)
+      };
+    }
 
     // Build the form input list from the model's biomarkers,
     // enriched with test names from testDefs and available units from conversions
@@ -160,11 +194,29 @@ function calculateAge(dob, testDate) {
   return ms / (365.25 * 24 * 60 * 60 * 1000);
 }
 
-function getTodayString() {
-  var d = new Date();
+// Local calendar date as yyyy-mm-dd. Deliberately not toISOString(), which
+// converts to UTC and can land on the wrong day either side of midnight.
+function toDateString(d) {
   return d.getFullYear() + '-' +
     String(d.getMonth() + 1).padStart(2, '0') + '-' +
     String(d.getDate()).padStart(2, '0');
+}
+
+function getTodayString() {
+  return toDateString(new Date());
+}
+
+// Midnight tomorrow: the latest test date accepted, i.e. today plus one day of
+// grace for clock skew. Test dates parse to local midnight, so a date of
+// tomorrow compares equal to this and passes; the day after does not.
+// This is also the test date input's `max`, so the browser's own validation and
+// the check in calculateResult agree — set to today, the browser rejected the
+// grace day before our own logic ever ran.
+function latestAllowedTestDate() {
+  var d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return d;
 }
 
 // --- Age-stratified defaults (linear interpolation) ---
@@ -189,6 +241,46 @@ function getDefaultForAge(age, test_id) {
     }
   }
   return null;
+}
+
+// Returns the PhenoAge uncertainty (in years, 1 SD) introduced by imputing
+// `test_id` with its population default at a given age. Linearly interpolated
+// from uncertainty.csv, mirroring getDefaultForAge.
+function getUncertaintyForAge(age, test_id) {
+  if (!uncertainties || uncertainties.length === 0) return null;
+  if (age <= uncertainties[0].age) return uncertainties[0][test_id];
+  if (age >= uncertainties[uncertainties.length - 1].age) {
+    return uncertainties[uncertainties.length - 1][test_id];
+  }
+  for (var i = 0; i < uncertainties.length - 1; i++) {
+    if (age >= uncertainties[i].age && age <= uncertainties[i + 1].age) {
+      var t = (age - uncertainties[i].age) / (uncertainties[i + 1].age - uncertainties[i].age);
+      var lo = uncertainties[i][test_id];
+      var hi = uncertainties[i + 1][test_id];
+      if (lo == null || hi == null || isNaN(lo) || isNaN(hi)) return null;
+      return lo + t * (hi - lo);
+    }
+  }
+  return null;
+}
+
+// Imputation uncertainty band on the displayed biological age. Because the
+// PhenoAge markers are near-independent once you condition on age (mean
+// pairwise correlation ≈ 0.04 in NHANES III), the variance contributed by each
+// defaulted marker adds, so the total SD is the quadrature sum of the per-marker
+// year-SDs from uncertainty.csv. Returns whole-year {low, high} bounds centred
+// on phenoAge, or null when nothing was defaulted (an exact result).
+function imputationBand(phenoAge, age, defaultedIds) {
+  if (!defaultedIds || defaultedIds.length === 0) return null;
+  var variance = 0;
+  for (var i = 0; i < defaultedIds.length; i++) {
+    var sd = getUncertaintyForAge(age, defaultedIds[i]);
+    if (sd != null && !isNaN(sd)) variance += sd * sd;
+  }
+  if (variance <= 0) return null;
+  var band = IMPUTATION_BAND_Z * Math.sqrt(variance);
+  if (band <= IMPUTATION_BAND_MIN) return null; // within ±1 yr — not worth a range
+  return { low: Math.floor(phenoAge - band), high: Math.ceil(phenoAge + band) };
 }
 
 // --- Unit conversion engine ---
@@ -276,24 +368,27 @@ function applyTransform(value, transform, refValues, transformFloor) {
 // --- Model calculation ---
 
 function calculateMortalityModel(rollingTotal, constants) {
-  var tmonths = constants.tmonths;
   var gamma = constants.gamma;
 
-  rollingTotal = rollingTotal + constants.intercept;
+  // xb is the model's linear predictor (the weighted biomarker sum + intercept).
+  var xb = rollingTotal + constants.intercept;
 
-  var mortalityScore = 1 - Math.exp(
-    -Math.exp(rollingTotal) * (Math.exp(gamma * tmonths) - 1) / gamma
-  );
-
+  // PhenoAge is an exact affine function of xb: the exp/ln of the published
+  // mortality-score -> age transform cancel algebraically, leaving
+  //   PhenoAge = phenoage_intercept + (ln(-phenoage_log_coeff * k) + xb) / phenoage_divisor
+  // where k = (exp(gamma * tmonths) - 1) / gamma. Computing it directly (rather
+  // than forming the 120-month mortality score and taking 1 - exp(...)) avoids
+  // catastrophic float cancellation for low-risk users and is simpler.
+  var k = (Math.exp(gamma * constants.tmonths) - 1) / gamma;
   var bioAge = constants.phenoage_intercept +
-    Math.log(constants.phenoage_log_coeff * Math.log(1 - mortalityScore)) /
-    constants.phenoage_divisor;
+    (Math.log(-constants.phenoage_log_coeff * k) + xb) / constants.phenoage_divisor;
 
+  // 12-month mortality risk still needs the Gompertz survival expression.
   var riskOfDeath = 1 - Math.exp(
-    -Math.exp(rollingTotal) * (Math.exp(gamma * 12) - 1) / gamma
+    -Math.exp(xb) * (Math.exp(gamma * 12) - 1) / gamma
   );
 
-  return { bioAge: bioAge, mortalityScore: mortalityScore, riskOfDeath: riskOfDeath };
+  return { bioAge: bioAge, riskOfDeath: riskOfDeath };
 }
 
 // --- URL anchor persistence ---
@@ -346,6 +441,16 @@ function createAnchorFromValues(dob, testdate, formTests, values, units) {
   return url;
 }
 
+// The page's own <link rel="canonical"> (see index.html) names the friendly,
+// themed page this embed lives inside — not this bare iframe document — so a
+// result link built from it lands a visitor somewhere with real chrome around
+// it rather than the raw embed. Falls back to this document's own URL (minus
+// any existing fragment) if a canonical tag is ever missing.
+function resultLinkBaseUrl() {
+  var canonical = document.querySelector('link[rel="canonical"]');
+  return (canonical && canonical.href) || window.location.href.split('#')[0];
+}
+
 // --- Input parsing and validation ---
 
 // Decimal separator for the user's locale (most browsers normalise type="number"
@@ -370,28 +475,171 @@ function parseInput(value) {
   return Number(value);
 }
 
-function clearInputErrors() {
-  var errors = document.querySelectorAll('.errorNaN, .input-error, .input-warning');
-  for (var i = 0; i < errors.length; i++) {
-    errors[i].classList.remove('errorNaN', 'input-error', 'input-warning');
-    errors[i].removeAttribute('aria-describedby');
-    errors[i].removeAttribute('aria-invalid');
+// --- Notices -----------------------------------------------------------------
+// Every user-facing message goes through one of these two constructors, so
+// severity and styling can never drift apart again. See the .notice block in
+// shared/embed.css. `level` is 'neutral' | 'success' | 'warning' | 'error'.
+
+// Build the class attribute for a notice. `contexts` is an optional array of
+// modifier suffixes, e.g. ['field'] or ['headline'].
+function noticeClass(level, contexts) {
+  var cls = 'notice notice--' + (level || 'neutral');
+  if (contexts) {
+    for (var i = 0; i < contexts.length; i++) cls += ' notice--' + contexts[i];
   }
-  var msgs = document.querySelectorAll('.error-message, .range-alert');
-  for (var i = 0; i < msgs.length; i++) {
-    msgs[i].remove();
+  return cls;
+}
+
+// A global notice as an HTML string, for the innerHTML-driven result panel.
+// `html` is trusted markup (already-escaped values from t() and figure()).
+// An optional `title` is rendered as a leading bold label.
+function noticeHTML(level, html, opts) {
+  opts = opts || {};
+  var label = opts.title ? '<strong>' + opts.title + '</strong> ' : '';
+  return '<div class="' + noticeClass(level, opts.contexts) + '">' +
+    label + html + '</div>';
+}
+
+// Field notices are reconciled, not rebuilt. calculateResult() runs on every
+// keystroke, so tearing them all down and re-adding them made every alert on the
+// page collapse and regrow whenever any value changed. Instead: mark them stale
+// up front, let attachFieldNotice revive and update the ones still wanted, then
+// sweep whatever is left. A surviving notice keeps its DOM node, so a change of
+// severity cross-fades via the CSS transition instead of reflowing.
+// Set the gutter glyph for a row.
+//   'ok'        — a value the user supplied, in range
+//   'estimated' — filled from the population average, not measured
+//   'hint'      — a prompt for something missing
+//   'warning' / 'error' — faults
+//   ''          — clears it
+// A tick on an imputed value would claim the user had provided something they
+// hadn't, so those get "≈": the row is answered, but only approximately.
+var FIELD_GLYPHS = { ok: '✓', estimated: '≈', hint: 'i', warning: '!', error: '!' };
+
+function setFieldState(elementId, state) {
+  var el = document.getElementById(elementId);
+  var row = el && el.closest('.field');
+  var icon = row && row.querySelector('.field-status-icon');
+  if (!icon) return;
+  icon.textContent = state ? (FIELD_GLYPHS[state] || '') : '';
+  icon.className = 'field-status-icon' + (state ? ' field-status-' + state : '');
+}
+
+function beginFieldNotices() {
+  var icons = document.querySelectorAll('.field-status-icon');
+  for (var i = 0; i < icons.length; i++) {
+    icons[i].textContent = '';
+    icons[i].className = 'field-status-icon';
+  }
+  var marked = document.querySelectorAll('.input-error, .input-warning');
+  for (var i = 0; i < marked.length; i++) {
+    marked[i].classList.remove('input-error', 'input-warning',
+      'notice--warning', 'notice--error');
+    marked[i].removeAttribute('aria-describedby');
+    marked[i].removeAttribute('aria-invalid');
+  }
+  var rows = document.querySelectorAll('.row-flagged');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.remove('row-flagged',
+      'notice--neutral', 'notice--warning', 'notice--error');
+  }
+  var notices = document.querySelectorAll('[data-field-notice]');
+  for (var i = 0; i < notices.length; i++) {
+    notices[i].setAttribute('data-stale', '1');
   }
 }
 
-function markInputError(elementId, message) {
-  var el = document.getElementById(elementId);
-  if (el) el.classList.add('errorNaN');
-  if (message) {
-    var msg = document.createElement('span');
-    msg.className = 'error-message';
-    msg.textContent = ' ' + message;
-    if (el && el.parentNode) el.parentNode.appendChild(msg);
+// Remove the notices nothing revived during this pass. They collapse shut on
+// the same timing they opened on, rather than blinking out from under a row
+// that is still fading — the pair went in as one object and has to leave as one.
+function endFieldNotices() {
+  var stale = document.querySelectorAll('[data-field-notice][data-stale]');
+  for (var i = 0; i < stale.length; i++) {
+    var slot = stale[i].closest('.field-notice');
+    if (!slot) { stale[i].remove(); continue; }
+    // Drop the identifiers first: a notice that reappears for this field while
+    // the old one is still closing must not find the dying node and revive it.
+    stale[i].removeAttribute('id');
+    stale[i].removeAttribute('data-field-notice');
+    closeFieldNotice(slot);
   }
+}
+
+function closeFieldNotice(slot) {
+  if (slot.getAttribute('data-closing')) return;
+  slot.setAttribute('data-closing', '1');
+
+  var animated = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+  if (!animated) { slot.remove(); return; }
+
+  slot.classList.remove('field-notice-open');
+  var done = false;
+  function finish() {
+    if (done) return;
+    done = true;
+    slot.remove();
+  }
+  slot.addEventListener('transitionend', function(e) {
+    if (e.target === slot) finish();
+  });
+  // Belt and braces: a slot that is display:none or already collapsed fires no
+  // transitionend, and a notice that never leaves the DOM would stack up.
+  setTimeout(finish, 400);
+}
+
+// Attach a notice to a form field, marking the input and wiring ARIA. Every
+// field is a .field row on the shared grid, so the notice is a full-width cell
+// beneath its own row, tinted to match: the pair reads as one block and there is
+// never a message floating free of the input it is about.
+//
+// `level` is 'neutral' | 'warning' | 'error'. Only the latter two are faults, so
+// only they mark the input itself; a neutral notice is a prompt (e.g. "enter
+// your date of birth"), which tints its row but leaves the input alone.
+function attachFieldNotice(elementId, level, message) {
+  var el = document.getElementById(elementId);
+  if (!el) return;
+  // The notice--* level class carries the severity colours as custom properties;
+  // the input and the row pick them up from it rather than redefining them.
+  if (level === 'warning' || level === 'error') {
+    el.classList.add(level === 'error' ? 'input-error' : 'input-warning',
+      'notice--' + level);
+    if (level === 'error') el.setAttribute('aria-invalid', 'true');
+  }
+
+  setFieldState(elementId, level === 'neutral' ? 'hint' : level);
+
+  var row = el.closest('.field');
+  if (row) row.classList.add('row-flagged', 'notice--' + level);
+  if (!message) return;
+
+  var noticeId = elementId + '-alert';
+  el.setAttribute('aria-describedby', noticeId);
+
+  // Already on screen: update in place rather than replacing the node.
+  var existing = document.getElementById(noticeId);
+  if (existing) {
+    existing.removeAttribute('data-stale');
+    existing.className = noticeClass(level, ['field']);
+    if (existing.textContent !== message) existing.textContent = message;
+    return;
+  }
+
+  var p = document.createElement('p');
+  p.id = noticeId;
+  p.className = noticeClass(level, ['field']);
+  p.setAttribute('data-field-notice', '');
+  p.textContent = message;
+
+  if (!row) return;
+  var slot = document.createElement('div');
+  slot.className = 'field-notice notice-collapse';
+  slot.appendChild(p);
+  row.appendChild(slot);
+  // Let it paint collapsed, then open it so the transition runs.
+  requestAnimationFrame(function() {
+    slot.classList.add('field-notice-open');
+  });
 }
 
 // --- Range validation ---
@@ -431,27 +679,21 @@ function formatSigFigs(value, n) {
   return raw.toFixed(decimals);
 }
 
-function showRangeAlert(elementId, level, message) {
-  var el = document.getElementById(elementId);
-  if (!el) return;
-  el.classList.add(level === 'error' ? 'input-error' : 'input-warning');
-  if (level === 'error') el.setAttribute('aria-invalid', 'true');
-  var row = el.closest('tr');
-  if (row) {
-    var alertId = elementId + '-alert';
-    var alert = document.createElement('tr');
-    alert.className = 'range-alert';
-    var td = document.createElement('td');
-    td.setAttribute('colspan', '3');
-    var p = document.createElement('p');
-    p.id = alertId;
-    p.className = level === 'error' ? 'input-alert input-alert-error' : 'input-alert';
-    p.textContent = message;
-    td.appendChild(p);
-    alert.appendChild(td);
-    row.parentNode.insertBefore(alert, row.nextSibling);
-    el.setAttribute('aria-describedby', alertId);
-  }
+// Is this result outside anything the model produced on a real population?
+//
+// The bounds in config/bounds.csv come from analysis/generate_bounds.py, which
+// scores every complete-case NHANES III participant and rounds the observed
+// extremes of PhenoAge acceleration outward with a margin. They are deliberately
+// not a percentile cut: a 0.5/99.5 threshold would flag 1% of genuine users, so
+// instead a trip here means "no real participant looked remotely like this",
+// which in practice means a mistyped value or the wrong units selected.
+//
+// Note this tests acceleration, not absolute age. A negative PhenoAge is not by
+// itself absurd — NHANES III contains genuine values just below zero, and the
+// model is only validated on adults anyway.
+function isRidiculousResult(acceleration) {
+  if (!bounds) return false;
+  return acceleration < bounds.accelLow || acceleration > bounds.accelHigh;
 }
 
 // --- Main calculation triggered by form input ---
@@ -460,9 +702,23 @@ function calculateResult() {
   var shareSection = document.getElementById('shareSection');
   var saveSection = document.getElementById('saveSection');
   var warningsDiv = document.getElementById('resultWarnings');
-  var summaryEl = document.getElementById('resultSummary');
-  clearInputErrors();
-  var errors = [];
+  beginFieldNotices();
+  // Counts blocking problems. Each is shown against its own field, so this is
+  // only a gate on whether a result can be produced.
+  var errorCount = 0;
+
+  // No result to show: display `html` (if any) and hide the result sections.
+  // Every early return in this function ends here, so this is also where the
+  // field notices that nothing revived get swept.
+  // The share card stays on screen throughout, in its empty state — it is the
+  // thing the form is for, so showing what it will become is more use than
+  // hiding it until the last field is filled.
+  function showNoResult(html) {
+    endFieldNotices();
+    warningsDiv.innerHTML = html || '';
+    showEmptyShareCard();
+    if (saveSection) saveSection.style.display = 'none';
+  }
 
   // Read biomarker values and selected units from the form (always, even without DOB)
   var rawValues = [];
@@ -477,13 +733,13 @@ function calculateResult() {
     selectedUnits[i] = unitsElement.options[unitsElement.selectedIndex].text;
 
     if (isNaN(rawValues[i]) && valueElement.value !== '') {
-      markInputError(formTests[i].id);
-      errors.push(t('error_invalid_value', formTests[i].name));
+      attachFieldNotice(formTests[i].id, 'error', t('error_invalid_number'));
+      errorCount++;
     } else if (!isNaN(rawValues[i])) {
       // Reject zero/negative — but skip if plausible_low allows zero (e.g. CRP "not detectable")
       if (rawValues[i] <= 0 && !(formTests[i].plausible_low !== null && formTests[i].plausible_low <= 0)) {
-        markInputError(formTests[i].id, t('error_must_be_positive'));
-        errors.push(t('error_positive_detail', capitalizeFirst(formTests[i].name)));
+        attachFieldNotice(formTests[i].id, 'error', t('error_must_be_positive'));
+        errorCount++;
       }
     }
   }
@@ -530,25 +786,28 @@ function calculateResult() {
       }
       var msg = t('range_implausible',
         capitalizeFirst(formTests[i].name), pLow, pHigh, selectedUnits[i]);
-      if (suggestedUnit) {
-        msg += ' ' + t('range_suggest_unit', suggestedUnit);
-      }
-      showRangeAlert(formTests[i].id, 'error', msg);
+      msg += ' ' + (suggestedUnit ? t('range_suggest_unit', suggestedUnit) : t('range_check'));
+      attachFieldNotice(formTests[i].id, 'error', msg);
       implausibleNames.push(formTests[i].name);
     } else if (rangeStatus === 'warning') {
       var nLow = formatRangeInUnit(formTests[i].normal_low, unitIdx, formTests[i], canonicalContext);
       var nHigh = formatRangeInUnit(formTests[i].normal_high, unitIdx, formTests[i], canonicalContext);
-      showRangeAlert(formTests[i].id, 'warning',
+      attachFieldNotice(formTests[i].id, 'warning',
         t('range_warning',
           capitalizeFirst(formTests[i].name), nLow, nHigh, selectedUnits[i]));
+    } else {
+      // Population-average fills are marked as estimates, not as answers.
+      var filledInput = document.getElementById(formTests[i].id);
+      setFieldState(formTests[i].id,
+        filledInput && filledInput.classList.contains('default-value')
+          ? 'estimated' : 'ok');
     }
   }
 
-  if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+  // Every error here is already shown against its own field, so there is
+  // nothing to add at the foot of the form.
+  if (errorCount > 0) {
+    showNoResult('');
     return;
   }
 
@@ -563,85 +822,74 @@ function calculateResult() {
   var testdateInput = document.getElementById('testdate');
   var dobVal = dobInput.value;
   var testdateVal = testdateInput.value;
-  var dobPrompt = document.getElementById('dobPrompt');
   var hasDates = dobVal && testdateVal;
+  var anyFilled = rawValues.some(function(v) { return !isNaN(v); });
 
   if (!hasDates) {
-    // Show DOB prompt — escalate to error style if all biomarker values are filled.
-    // Wording adapts to which date(s) are missing.
-    if (dobPrompt) {
-      dobPrompt.style.display = '';
-      var missingDob = !dobVal;
-      var missingTest = !testdateVal;
-      var promptKey;
-      if (allFilled) {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_error_both'
-          : missingDob ? 'dob_prompt_error_dob'
-          : 'dob_prompt_error_testdate';
-        dobPrompt.className = 'dob-prompt dob-prompt-error';
-      } else {
-        promptKey = (missingDob && missingTest) ? 'dob_prompt_both'
-          : missingDob ? 'dob_prompt'
-          : 'dob_prompt_testdate';
-        dobPrompt.className = 'dob-prompt';
-      }
-      dobPrompt.textContent = t(promptKey);
+    // Prompt against whichever date field is empty, so the message sits on the
+    // row it is asking about. Neutral while the form is still being filled in;
+    // once every biomarker is present the missing date is the only thing left
+    // between the user and a result, so it escalates to an error.
+    var level = allFilled ? 'error' : 'neutral';
+    if (!dobVal) {
+      attachFieldNotice('dob', level,
+        t(allFilled ? 'dob_prompt_error_dob' : 'dob_prompt'));
     }
-    if (!allFilled) {
-      warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
-    } else {
-      warningsDiv.innerHTML = '';
+    if (!testdateVal) {
+      attachFieldNotice('testdate', level,
+        t(allFilled ? 'dob_prompt_error_testdate' : 'dob_prompt_testdate'));
     }
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+    // Nothing typed yet: the empty form speaks for itself, and a prompt to fill
+    // it in reads as a reprimand for not having done so instantly.
+    showNoResult(!allFilled && anyFilled
+      ? noticeHTML('neutral', t('prompt_enter_all_values')) : '');
     return;
   }
 
-  // Hide DOB prompt once dates are present
-  if (dobPrompt) dobPrompt.style.display = 'none';
   // The legacy-URL note nudges users to enter DOB; once they have, drop it.
   var legacyNote = document.querySelector('.legacy-note');
   if (legacyNote) legacyNote.remove();
 
+  // dobVal/testdateVal are guaranteed non-empty valid yyyy-mm-dd strings here:
+  // hasDates checked non-empty above, and native <input type="date"> only ever
+  // holds "" or a valid date, never something Date() can't parse.
   var dob = new Date(dobVal + 'T00:00:00');
   var testDate = new Date(testdateVal + 'T00:00:00');
 
-  if (isNaN(dob.getTime())) {
-    markInputError('dob', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_dob')));
+  if (testDate <= dob) {
+    attachFieldNotice('testdate', 'error', t('error_test_date_after_dob_detail'));
+    errorCount++;
   }
-  if (isNaN(testDate.getTime())) {
-    markInputError('testdate', t('error_invalid_date'));
-    errors.push(t('error_invalid_value', t('label_test_date')));
-  }
-  if (!isNaN(dob.getTime()) && !isNaN(testDate.getTime()) && testDate <= dob) {
-    markInputError('testdate', t('error_test_date_after_dob'));
-    errors.push(t('error_test_date_after_dob_detail'));
+  // A test date in the future makes the calculated age wrong. Allow one day of
+  // grace: a device clock that is a few hours slow, or a user in a timezone
+  // where it is already tomorrow, can make a legitimate "today" look like the
+  // future. Nobody benefits from rejecting a date one day out, and anything
+  // beyond that is a real typo.
+  if (testDate > latestAllowedTestDate()) {
+    attachFieldNotice('testdate', 'error', t('error_test_date_future'));
+    errorCount++;
   }
 
-  if (errors.length > 0) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', errors.join('; ')) + '</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+  if (errorCount > 0) {
+    showNoResult('');
     return;
   }
 
+  setFieldState('dob', 'ok');
+  setFieldState('testdate', 'ok');
+  // The dates are now good, so any "enter your dates first" complaint from the
+  // defaults button no longer applies.
+  clearDefaultsMessage();
+
   var age = calculateAge(dob, testDate);
   if (age < 0 || age > 150) {
-    warningsDiv.innerHTML = '<p>' + t('error_prefix', t('error_age_out_of_range', age.toFixed(1))) + '</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+    showNoResult(noticeHTML('error',
+      t('error_prefix', t('error_age_out_of_range', age.toFixed(1)))));
     return;
   }
 
   if (!allFilled) {
-    warningsDiv.innerHTML = '<p>' + t('prompt_enter_all_values') + '</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+    showNoResult(noticeHTML('neutral', t('prompt_enter_all_values')));
     return;
   }
 
@@ -685,335 +933,226 @@ function calculateResult() {
 
   // Display the result
   if (isNaN(phenoAge) || !isFinite(phenoAge)) {
-    warningsDiv.innerHTML = '<p>' + t('error_calculation_failed') + '</p>';
-    if (shareSection) shareSection.style.display = 'none';
-    if (saveSection) saveSection.style.display = 'none';
-    if (summaryEl) summaryEl.textContent = '';
+    showNoResult(noticeHTML('error', t('error_calculation_failed')));
     return;
   }
 
   // 1. Share card (the primary visual result)
-  generateShareCard(phenoAge, age, acceleration);
+  generateShareCard(phenoAge, age);
 
-  // 2. Warnings (defaults, implausible values)
-  warningsDiv.innerHTML = '';
+  // 2. Result explanation — a stack of notices above the share card. The
+  // biological age leads, because it is what the user came for; everything else
+  // is context for it. Warnings are their own notices at their own severity,
+  // rather than coloured text inside a neutral box.
 
-  // Note if any values are population defaults — graduated warning
+  // Which markers were filled from population defaults?
   var defaultCount = 0;
+  var defaultedIds = [];
   for (var i = 0; i < formTests.length; i++) {
     var input = document.getElementById(formTests[i].id);
-    if (input && input.classList.contains('default-value')) defaultCount++;
-  }
-  if (defaultCount > 0) {
-    var totalTests = formTests.length;
-    var warningKey;
-    if (defaultCount >= totalTests) {
-      warningKey = 'defaults_warning_all';
-    } else if (defaultCount >= Math.ceil(totalTests * 2 / 3)) {
-      warningKey = 'defaults_warning_extreme';
-    } else if (defaultCount >= Math.ceil(totalTests / 3)) {
-      warningKey = 'defaults_warning_very';
-    } else if (defaultCount === 1) {
-      warningKey = 'defaults_warning_one';
-    } else {
-      warningKey = 'defaults_warning_few';
+    if (input && input.classList.contains('default-value')) {
+      defaultCount++;
+      defaultedIds.push(formTests[i].id);
     }
-    var level = (defaultCount >= Math.ceil(totalTests / 3)) ? 'error' : 'warning';
-    warningsDiv.innerHTML += '<div class="result-warning' +
-      (level === 'error' ? ' result-warning-severe' : '') + '">' +
-      t(warningKey, defaultCount, totalTests) + '</div>';
+  }
+  var totalTests = formTests.length;
+
+  // Emphasise a figure within the result box.
+  function figure(value) {
+    return '<strong class="result-figure">' + value + '</strong>';
   }
 
-  // Warning if any values look implausible
-  if (implausibleNames.length > 0) {
-    var warningText = implausibleNames.length === 1
+  // Every figure goes inside a single box, with any warnings stacked below it.
+  // One box per sentence turned a single answer into a wall of six alerts.
+  var notices = [];
+  var lines = [];
+
+  // Biological age — the headline line of the result box. A range when
+  // imputation leaves it uncertain, otherwise a point estimate.
+  var band = imputationBand(phenoAge, age, defaultedIds);
+  var bioageText = (band && band.high > band.low)
+    ? t('result_list_bioage_range', figure(band.low), figure(band.high))
+    : t('result_list_bioage_point', figure(phenoAge.toFixed(1)));
+  lines.push('<p class="result-headline">' + bioageText + '.</p>');
+
+  // Is the result outside anything seen in the NHANES III population? If so it
+  // almost certainly reflects a mistyped value or wrong unit, not biology. Say
+  // so loudly, but still show the number — it is the user's best clue as to
+  // which input is wrong. Where markers were already flagged as implausible,
+  // name them here so there is one actionable message rather than two.
+  var ridiculous = isRidiculousResult(acceleration);
+  if (ridiculous) {
+    var culpritText = implausibleNames.length > 0
+      ? (implausibleNames.length === 1
+          ? t('result_ridiculous_culprit_one', implausibleNames[0])
+          : t('result_ridiculous_culprit_many', joinAndList(implausibleNames)))
+      : t('result_ridiculous_generic');
+    notices.push(noticeHTML('error', culpritText, { title: t('notice_warning_label') }));
+  } else if (implausibleNames.length > 0) {
+    // Plausible-looking result, but a marker is out of its plausible range.
+    notices.push(noticeHTML('error', implausibleNames.length === 1
       ? t('result_implausible_warning_one', implausibleNames[0])
-      : t('result_implausible_warning_many', joinAndList(implausibleNames));
-    warningsDiv.innerHTML += '<div class="result-warning"><strong>Warning:</strong> ' +
-      warningText + '</div>';
+      : t('result_implausible_warning_many', joinAndList(implausibleNames)),
+      { title: t('notice_warning_label') }));
   }
 
-  // 3. Descriptive summary text (below the share buttons).
-  // Use a dedicated "less than 0.1%" phrasing for tiny risks — otherwise a
-  // healthy 30-year-old sees something like "0.0050%" which reads as noise.
+  // Imputed markers make the estimate approximate.
+  if (defaultCount > 0) {
+    var severe = defaultCount >= Math.ceil(totalTests / 3);
+    var noteKey = defaultCount === 1 ? 'result_list_approx_one' : 'result_list_approx_many';
+    notices.push(noticeHTML(severe ? 'error' : 'warning',
+      capitalizeFirst(t(noteKey, defaultCount, totalTests)) + '.'));
+  }
+
+  // Chronological age and the comparison with it, as one sentence. Neither
+  // direction is tinted: older is a result, not a fault, and tinting younger
+  // as "good" implied the reverse for older — which is what made a broken
+  // "1067 years older" look like a mild caution rather than the error it was.
+  var accelRounded = Math.round(acceleration);
+  var chronoFigure = figure(age.toFixed(1));
+  var accelText;
+  if (accelRounded < -1) {
+    accelText = t('result_chrono_accel_younger', chronoFigure, figure(Math.abs(accelRounded)));
+  } else if (accelRounded > 1) {
+    accelText = t('result_chrono_accel_older', chronoFigure, figure(accelRounded));
+  } else {
+    accelText = t('result_chrono_accel_ontrack', chronoFigure);
+  }
+
+  // Risk of death in the coming year. Use a dedicated "less than 0.1%" phrasing
+  // for tiny risks — otherwise a healthy 30-year-old sees "0.0050%", which reads
+  // as noise. Follows the chronological-age sentence directly, in the same
+  // paragraph, rather than a new line — it is the next clause of the same
+  // thought, not a separate point.
   var oneInN = Math.round(parseFloat((1 / riskOfDeath).toPrecision(3))).toLocaleString();
+  var riskText;
   if (riskOfDeath * 100 < 0.1) {
-    summaryEl.textContent = t('result_summary_low_risk',
-      age.toFixed(1), phenoAge.toFixed(1), oneInN);
+    riskText = t('result_list_risk_low', figure(t('result_one_in', oneInN)));
   } else {
     var riskPct = formatSigFigs(riskOfDeath * 100, 2);
-    summaryEl.textContent = t('result_summary',
-      age.toFixed(1), phenoAge.toFixed(1), riskPct, oneInN);
+    riskText = t('result_list_risk', figure(riskPct + '%'), figure(t('result_one_in', oneInN)));
   }
+  lines.push('<p>' + accelText + ' ' + riskText + '</p>');
 
-  // 4. Save your result — in its own div below the share card
-  if (saveSection) saveSection.style.display = '';
-  var resultLink = createAnchorFromValues(dobVal, testdateVal, formTests, rawValues, selectedUnits);
-  saveSection.innerHTML = '<div class="save-section">' +
-    '<h3>' + t('save_section_heading') + '</h3>' +
-    '<label for="resultLink">' + t('save_link_label') + '</label>' +
-    '<div class="save-link-row">' +
-      '<input type="text" id="resultLink" class="result-link-input" value="' +
-        resultLink.replace(/"/g, '&quot;') + '" readonly onclick="this.select()">' +
-      '<button type="button" class="copy-btn" onclick="copyResultLink()">' +
-        t('save_copy_button') + '</button>' +
-    '</div>' +
-    '<p class="save-privacy-note">' + t('save_privacy_note') + '</p>' +
-
-    '<div class="save-option">' +
-      '<div class="save-buttons">' +
-        '<button type="button" onclick="downloadCSV()" class="csv-download">' +
-          t('save_download_csv') + '</button>' +
-      '</div>' +
-      '<p class="save-option-note">' + t('save_csv_note') + '</p>' +
-    '</div>' +
-
-    '<div class="save-option">' +
-      '<div class="save-buttons">' +
-        '<button type="button" onclick="saveToLocalStorage(); showBrowserSaveConfirm()" class="save-browser-btn">' +
-          t('save_to_browser') + '</button>' +
-      '</div>' +
-      '<p class="save-option-note save-browser-warning">' + t('save_browser_warning') + '</p>' +
-    '</div>' +
+  endFieldNotices();
+  warningsDiv.innerHTML = '<div class="notice-group">' +
+    noticeHTML('neutral', lines.join(''), { contexts: ['box'] }) +
+    notices.join('') +
     '</div>';
 
-}
-
-// --- Share card generation ---
-
-// Cached PNG blob and filename from the most recent card render
-var shareCardBlob = null;
-var shareCardFilename = 'my-biological-age.png';
-
-function generateShareCard(bioAge, chronAge, acceleration) {
-  var shareSection = document.getElementById('shareSection');
-  var container = document.getElementById('shareCardContainer');
-  if (!container || !shareSection) return;
-
-  shareSection.style.display = 'block';
-
-  // Update button text from strings
-  var downloadBtn = document.getElementById('downloadImageBtn');
-  if (downloadBtn) downloadBtn.textContent = t('share_download_image');
-
-  // Reassuring note that the image doesn't include the user's blood values
-  var imageNote = document.getElementById('shareImageNote');
-  if (imageNote) imageNote.textContent = t('share_image_note');
-
-  // Build the HTML card
-  container.innerHTML = generateResultCardHTML(
-    bioAge, chronAge, t('card_url'), t('card_methodology')
-  );
-
-  // Compute a descriptive filename
-  var roundedBio = Math.round(bioAge);
-  var flooredChrono = Math.floor(chronAge);
-  shareCardFilename = 'my-biological-age-phenoage-' + roundedBio + '-' + flooredChrono + '.png';
-
-  // Generate PNG for right-click saving and download/share buttons
-  shareCardBlob = null;
-  var cardEl = container.querySelector('.share-card-inner');
-  if (cardEl && window.modernScreenshot) {
-    modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
-      .then(function(dataUrl) {
-        // Convert data URL to a named object URL for right-click "Save image as"
-        return fetch(dataUrl).then(function(r) { return r.blob(); });
-      })
-      .then(function(blob) {
-        shareCardBlob = blob;
-        var objectUrl = URL.createObjectURL(blob);
-        // Wrap image in an <a> with download attribute so right-click uses our filename
-        var wrapper = document.getElementById('shareCardImageLink');
-        var img = document.getElementById('shareCardImage');
-        if (wrapper && img) {
-          wrapper.href = objectUrl;
-          wrapper.download = shareCardFilename;
-          img.src = objectUrl;
-          img.alt = t('card_aria_label', roundedBio, flooredChrono, badgeTextFor(acceleration));
-          wrapper.style.display = 'block';
-          container.style.display = 'none';
-        }
-      })
-      .catch(function() {
-        // PNG generation failed; the HTML card will remain visible.
-      });
+  // 4. Save your result. The panel itself is built once, in createFormElements —
+  // rebuilding it here would throw away the user's chosen tab, and their focus
+  // with it, on every keystroke.
+  if (saveSection) saveSection.style.display = '';
+  var linkInput = document.getElementById('resultLink');
+  if (linkInput) {
+    linkInput.value = resultLinkBaseUrl() + createAnchorFromValues(
+      dobVal, testdateVal, formTests, rawValues, selectedUnits);
   }
 }
 
-function badgeTextFor(acceleration) {
-  var diff = acceleration;
-  if (diff < -1) return t('card_younger', Math.abs(Math.round(diff)));
-  if (diff > 1) return t('card_older', Math.round(diff));
+// --- Share card ---
+// Canvas export (JPEG blob, download link, Web Share API) and the icon/label
+// on the two buttons are shared with every calculator — see card-kit.js's
+// CARD_EXPORT, getShareCanvas, downloadCard, shareCard and initShareButtons.
+
+var shareCardFilename = 'my-biological-age.' + CARD_EXPORT.ext;
+
+// The strings the canvas renderer needs, so all the i18n stays on this side and
+// share-card.js knows nothing about the string table.
+function cardStrings(pillText) {
+  return {
+    eyebrow: t('card_title'),
+    suffixLines: t('card_years_old_biologically').split('\n'),
+    pill: pillText,
+    bioLabel: t('card_biological_label'),
+    chronoLabel: t('card_chronological_label'),
+    cta: t('card_cta'),
+    url: t('card_url')
+  };
+}
+
+// The pill on the card, derived from the two figures the card actually prints
+// — round(bioAge) and floor(chronoAge) — not from the raw acceleration. Taken
+// from the raw value it could disagree with the numbers beside it: a 27.6-year
+// biological age against a 26.2-year chronological one prints "28" and "26" but
+// an acceleration of 1.4, which rounded to "1 year older" next to a visible gap
+// of two.
+// Both figures are already whole numbers, so the thresholds below mean the
+// smallest gap the pill ever names is two years — a one-year difference reads
+// as "Right on track". That is why the strings can be unconditionally plural:
+// "1 years older" was a symptom of rounding the raw acceleration here, not a
+// missing singular form.
+function badgeTextFor(displayedBio, displayedChrono) {
+  var diff = displayedBio - displayedChrono;
+  if (diff < -1) return t('card_younger', Math.abs(diff));
+  if (diff > 1) return t('card_older', diff);
   return t('card_on_track');
 }
 
-function generateResultCardHTML(rawBioAge, rawChronoAge, urlDisplay, methodologyText) {
-  var bioAge = Math.round(Number(rawBioAge));
-  var chronoAge = Math.floor(Number(rawChronoAge));
-  var diff = bioAge - chronoAge;
+// `acceleration` is not a parameter: everything the card says about the gap is
+// derived from the two figures it prints, so they can never contradict.
+function generateShareCard(bioAge, chronAge) {
+  var shareSection = document.getElementById('shareSection');
+  var canvas = getShareCanvas();
+  if (!canvas || !shareSection) return;
 
-  var badgeText, theme;
-  if (diff < -1) {
-    badgeText = t('card_younger', Math.abs(diff));
-    theme = { bg: '#125b4a', primary: '#5bc198', badgeBg: '#0d4236' };
-  } else if (diff >= -1 && diff <= 1) {
-    badgeText = t('card_on_track');
-    theme = { bg: '#1e3a8a', primary: '#60a5fa', badgeBg: '#172554' };
-  } else {
-    badgeText = t('card_older', diff);
-    theme = { bg: '#78350f', primary: '#fbbf24', badgeBg: '#451a03' };
-  }
+  shareSection.style.display = 'block';
+  shareSection.classList.remove('share-section-empty');
 
-  // --- Number line geometry ---
-  var minAge = Math.min(bioAge, chronoAge);
-  var maxAge = Math.max(bioAge, chronoAge);
-  var midPoint = (bioAge + chronoAge) / 2;
-  var lowerDecade = Math.floor(minAge / 10) * 10;
-  var upperDecade = Math.ceil(maxAge / 10) * 10;
-  var radiusToLower = midPoint - lowerDecade;
-  var radiusToUpper = upperDecade - midPoint;
-  var radius = Math.max(radiusToLower, radiusToUpper, 5);
-  radius += 7;
-  var span = radius * 2;
-  var startVal = midPoint - radius;
-  var endVal = midPoint + radius;
-  var bioPercent = ((bioAge - startVal) / span) * 100;
-  var chronoPercent = ((chronoAge - startVal) / span) * 100;
+  var downloadBtn = document.getElementById('downloadImageBtn');
+  if (downloadBtn) downloadBtn.disabled = false;
+  var imageNote = document.getElementById('shareImageNote');
+  if (imageNote) imageNote.textContent = t('share_image_note');
 
-  // Label collision: if markers are within 4% of each other, stack them
-  var labelCollision = Math.abs(bioPercent - chronoPercent) < 4;
+  var roundedBio = Math.round(bioAge);
+  var flooredChrono = Math.floor(chronAge);
+  var badge = badgeTextFor(roundedBio, flooredChrono);
+  shareCardFilename = 'my-biological-age-phenoage-' +
+    roundedBio + '-' + flooredChrono + '.' + CARD_EXPORT.ext;
+  canvas.setAttribute('aria-label', t('card_aria_label', roundedBio, flooredChrono, badge));
 
-  // Decade tick marks (skip if too close to either marker)
-  var ticksHTML = '';
-  var firstDecade = Math.max(0, Math.ceil(startVal / 10) * 10);
-  var lastDecade = Math.floor(endVal / 10) * 10;
-  for (var i = firstDecade; i <= lastDecade; i += 10) {
-    if (Math.abs(i - bioAge) <= 3 || Math.abs(i - chronoAge) <= 3) continue;
-    var tickPercent = ((i - startVal) / span) * 100;
-    ticksHTML += '<div style="position:absolute; top:72px; left:' + tickPercent +
-      '%; transform:translateX(-50%); text-align:center; z-index:1;">' +
-      '<span style="font-size:14px; color:rgba(255,255,255,0.4);">' + i + '</span></div>';
-  }
+  renderShareCard(canvas, {
+    bioAge: roundedBio,
+    chronoAge: flooredChrono,
+    scale: 2,
+    strings: cardStrings(badge)
+  });
+}
 
-  var highlightLeft = Math.min(bioPercent, chronoPercent);
-  var highlightWidth = Math.abs(bioPercent - chronoPercent);
+// The card before there is a result: the real chrome, an empty figure. It shows
+// what the form is for without inventing a number that could be screenshotted
+// and mistaken for one.
+function showEmptyShareCard() {
+  var shareSection = document.getElementById('shareSection');
+  var canvas = getShareCanvas();
+  if (!canvas || !shareSection) return;
 
-  // Biological marker (above the line)
-  var bioMarkerHTML;
-  if (labelCollision) {
-    // Stacked layout: both labels to one side
-    bioMarkerHTML = '<div style="position:absolute; bottom:74px; left:' + bioPercent +
-      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
-      '<span style="font-size:14px; color:' + theme.primary + ';">' + t('card_biological_label') +
-      ' ' + bioAge + '</span>' +
-      '<span style="font-size:14px; color:rgba(255,255,255,0.7); margin-top:2px;">' +
-      t('card_chronological_label') + ' ' + chronoAge + '</span>' +
-      '<div style="width:2px; height:10px; background:' + theme.primary + '; margin-top:4px; border-radius:2px;"></div>' +
-      '</div>';
-  } else {
-    bioMarkerHTML = '<div style="position:absolute; bottom:74px; left:' + bioPercent +
-      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
-      '<span style="font-size:14px; color:' + theme.primary + '; margin-bottom:2px;">' +
-      t('card_biological_label') + '</span>' +
-      '<span style="font-size:20px; color:' + theme.primary + '; font-weight:bold; background:' +
-      theme.bg + '; padding:0 6px; line-height:1; border-radius:4px;">' + bioAge + '</span>' +
-      '<div style="width:2px; height:10px; background:' + theme.primary + '; margin-top:4px; border-radius:2px;"></div>' +
-      '</div>';
-  }
+  shareSection.style.display = 'block';
+  shareSection.classList.add('share-section-empty');
 
-  // Chronological marker (below the line) — omit if labels are collapsed
-  var chronoMarkerHTML = '';
-  if (!labelCollision) {
-    chronoMarkerHTML = '<div style="position:absolute; top:64px; left:' + chronoPercent +
-      '%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:10;">' +
-      '<div style="width:2px; height:10px; background:rgba(255,255,255,0.7); margin-bottom:4px; border-radius:2px;"></div>' +
-      '<span style="font-size:20px; color:#ffffff; font-weight:bold; background:' + theme.bg +
-      '; padding:0 6px; line-height:1; border-radius:4px;">' + chronoAge + '</span>' +
-      '<span style="font-size:14px; color:rgba(255,255,255,0.7); margin-top:2px;">' +
-      t('card_chronological_label') + '</span></div>';
-  }
+  var downloadBtn = document.getElementById('downloadImageBtn');
+  if (downloadBtn) downloadBtn.disabled = true;
+  var imageNote = document.getElementById('shareImageNote');
+  if (imageNote) imageNote.textContent = '';
 
-  // Build the accessible card — aria-label on the wrapper, number line hidden from SR
-  var ariaLabel = t('card_aria_label', bioAge, chronoAge, badgeText);
-  var yearsOldLines = t('card_years_old_biologically').split('\n');
-
-  return '<div class="share-card" role="img" aria-label="' + ariaLabel.replace(/"/g, '&quot;') + '">' +
-    '<div class="share-card-inner" style="width:600px; height:600px; background-color:' + theme.bg +
-    '; color:#ffffff; padding:40px; box-sizing:border-box; display:flex; flex-direction:column;' +
-    ' justify-content:space-between; font-family:Inter,system-ui,-apple-system,sans-serif;">' +
-
-    // Header
-    '<div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">' +
-    '<p style="text-transform:uppercase; letter-spacing:2px; font-size:16px; opacity:0.8; margin:0; line-height:1;">' +
-    t('card_title') + '</p></div>' +
-
-    // Big number
-    '<div style="display:flex; flex-direction:column; align-items:center;">' +
-    '<div style="display:flex; align-items:center; gap:15px;">' +
-    '<span style="font-size:150px; font-weight:400; color:' + theme.primary +
-    '; line-height:0.8; letter-spacing:-4px;">' + bioAge + '</span>' +
-    '<span style="font-size:30px; text-align:left; line-height:1.2; font-weight:300;">' +
-    yearsOldLines.join('<br>') + '</span></div></div>' +
-
-    // Badge
-    '<div style="text-align:center; margin:40px 0 0;">' +
-    '<div style="background-color:' + theme.badgeBg +
-    '; display:inline-block; padding:10px 35px; border-radius:50px; font-size:26px; color:' +
-    theme.primary + '; font-weight:500;">' + badgeText + '</div></div>' +
-
-    // Number line (decorative — hidden from screen readers)
-    '<div aria-hidden="true" style="position:relative; height:130px; margin:0 20px;">' +
-    '<div style="position:absolute; top:58px; left:0; right:0; height:4px; background:rgba(255,255,255,0.2); border-radius:4px;"></div>' +
-    (highlightWidth > 0 ? '<div style="position:absolute; top:56px; left:calc(' + highlightLeft +
-      '% - 4px); width:calc(' + highlightWidth + '% + 8px); height:8px; background:' +
-      theme.primary + '; border-radius:4px; z-index:2;"></div>' : '') +
-    ticksHTML + bioMarkerHTML + chronoMarkerHTML + '</div>' +
-
-    // Footer / CTA
-    '<div style="text-align:center;">' +
-    '<p style="font-size:18px; opacity:0.7; margin:0; font-weight:300;">' + t('card_cta') + '</p>' +
-    '<p style="font-size:28px; font-weight:400; margin:2px 0 6px 0;">' + urlDisplay + '</p>' +
-    '<p style="font-size:13px; opacity:0.4; margin:0; font-weight:300;">' +
-    methodologyText + '</p></div>' +
-
-    '</div></div>';
+  canvas.setAttribute('aria-label', t('card_aria_label_empty'));
+  renderShareCard(canvas, {
+    empty: true,
+    scale: 2,
+    strings: cardStrings(t('card_empty_pill'))
+  });
 }
 
 function downloadShareCard() {
-  if (shareCardBlob) {
-    var link = document.createElement('a');
-    link.download = shareCardFilename;
-    link.href = URL.createObjectURL(shareCardBlob);
-    link.click();
-    URL.revokeObjectURL(link.href);
-    return;
-  }
-  // Fallback: try to generate on the fly
-  var container = document.getElementById('shareCardContainer');
-  var cardEl = container && container.querySelector('.share-card-inner');
-  if (cardEl && window.modernScreenshot) {
-    modernScreenshot.domToPng(cardEl, { width: 600, height: 600, scale: 2 })
-      .then(function(dataUrl) {
-        var link = document.createElement('a');
-        link.download = shareCardFilename;
-        link.href = dataUrl;
-        link.click();
-      });
-  }
+  downloadCard(getShareCanvas(), shareCardFilename);
 }
 
 function nativeShare() {
-  if (!navigator.share) return;
-  var blob = shareCardBlob;
-  if (!blob) return;
-  var file = new File([blob], shareCardFilename, { type: 'image/png' });
-  navigator.share({
-    title: t('share_native_title'),
-    text: t('share_native_text'),
-    files: [file]
-  }).catch(function() {
-    // Share cancelled or failed — nothing more to do.
-  });
+  // The URL is built from card_url (the same one printed on the card itself),
+  // not hardcoded here, so the two can never drift apart.
+  shareCard(getShareCanvas(), shareCardFilename,
+    t('share_native_title'), t('share_native_text', 'https://' + t('card_url')));
 }
 
 // --- Result link copy / browser save ---
@@ -1054,6 +1193,52 @@ function showBrowserSaveConfirm() {
 
 // --- Form generation ---
 
+// One row of the form grid. The date fields and the biomarkers are the same
+// shape — a label, a control, and a trailing cell — so they are built by the
+// same function and land on the same three columns. The wrapper is
+// `display: contents` (see .field in embed.css), which is what lets a row group
+// its own cells and its own notice without breaking out of the shared grid.
+//
+// `aux` is the trailing cell's content: the unit selector for a biomarker, the
+// "load from CSV" button on the first date row, nothing at all otherwise.
+function createFieldRow(id, labelText, control, aux) {
+  var field = document.createElement('div');
+  field.className = 'field';
+
+  // Leading gutter: a tick once the row holds a good value, an exclamation when
+  // it doesn't. It gives the left edge of the form something to do — the label
+  // column is ragged by design, so without this the space beside a short label
+  // reads as a hole — and it turns filling the form into visible progress.
+  var status = document.createElement('span');
+  status.className = 'field-status-icon';
+  status.setAttribute('aria-hidden', 'true');
+  field.appendChild(status);
+
+  var label = document.createElement('label');
+  label.className = 'field-label';
+  label.setAttribute('for', id);
+  label.textContent = labelText;
+  field.appendChild(label);
+
+  var controlCell = document.createElement('div');
+  controlCell.className = 'field-control';
+  controlCell.appendChild(control);
+  field.appendChild(controlCell);
+
+  var auxCell = document.createElement('div');
+  auxCell.className = 'field-aux';
+  if (aux) auxCell.appendChild(aux);
+  field.appendChild(auxCell);
+
+  // Empty by design: it carries the row's tint out to the full width of the
+  // embed so a flagged row is a band, not a stub.
+  var tail = document.createElement('div');
+  tail.className = 'field-tail';
+  field.appendChild(tail);
+
+  return field;
+}
+
 function createFormElements() {
   var saved = extractValuesFromAnchor(window.location.href);
   var fromStorage = false;
@@ -1075,95 +1260,87 @@ function createFormElements() {
   var formDiv = document.getElementById('phenoAgeForm');
   formDiv.innerHTML = '';
 
-  // DOB + Test date section
-  var dateSection = document.createElement('div');
-  dateSection.className = 'date-section';
-
-  var dobRow = document.createElement('div');
-  dobRow.className = 'date-row';
-  var dobLabel = document.createElement('label');
-  dobLabel.setAttribute('for', 'dob');
-  dobLabel.textContent = t('label_dob');
-  var dobInput = document.createElement('input');
-  dobInput.setAttribute('type', 'date');
-  dobInput.setAttribute('id', 'dob');
-  dobInput.setAttribute('max', getTodayString());
-  dobInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
-  if (saved && saved.dob) dobInput.value = saved.dob;
-  dobRow.appendChild(dobLabel);
-  dobRow.appendChild(dobInput);
-  if (saved && saved.isLegacy) {
-    var legacyNote = document.createElement('p');
-    legacyNote.className = 'input-alert legacy-note';
-    legacyNote.textContent = t('legacy_note');
-    dobRow.appendChild(legacyNote);
+  // Storage notice leads the form: it's context for everything below it (why
+  // the fields are already filled in), so it needs to be read first, not
+  // discovered after scrolling past the whole form.
+  if (fromStorage) {
+    var storageDiv = document.createElement('div');
+    storageDiv.className = noticeClass('neutral', ['muted']);
+    storageDiv.id = 'storageNotice';
+    storageDiv.innerHTML = t('storage_restored') + ' ' +
+      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
+    formDiv.appendChild(storageDiv);
   }
-  dateSection.appendChild(dobRow);
 
-  var testdateRow = document.createElement('div');
-  testdateRow.className = 'date-row';
-  var testdateLabel = document.createElement('label');
-  testdateLabel.setAttribute('for', 'testdate');
-  testdateLabel.textContent = t('label_test_date');
-  var testdateInput = document.createElement('input');
-  testdateInput.setAttribute('type', 'date');
-  testdateInput.setAttribute('id', 'testdate');
-  testdateInput.setAttribute('max', getTodayString());
-  testdateInput.setAttribute('oninput', 'updateDobPrompt(); calculateResult()');
-  if (saved && saved.testdate) {
-    testdateInput.value = saved.testdate;
-  } else {
-    testdateInput.value = getTodayString();
-  }
-  testdateRow.appendChild(testdateLabel);
-  testdateRow.appendChild(testdateInput);
-  dateSection.appendChild(testdateRow);
+  // One grid holds every row — the two dates and all nine biomarkers — so their
+  // labels, inputs and units line up on one set of columns instead of two
+  // layouts that happen to sit above each other.
+  var grid = document.createElement('div');
+  grid.className = 'field-grid';
 
-  // CSV upload — available at the top so users can load data before entering values
-  var csvRow = document.createElement('div');
-  csvRow.className = 'date-row csv-load-row';
+  // CSV upload rides in the trailing cell of the first row: it belongs at the
+  // top (you load a file before typing anything) and that cell is otherwise
+  // empty on the date rows.
   var csvBtn = document.createElement('button');
   csvBtn.setAttribute('type', 'button');
   csvBtn.className = 'csv-upload';
   csvBtn.textContent = t('save_upload_csv');
   csvBtn.onclick = uploadCSV;
-  csvRow.appendChild(csvBtn);
+
+  var dobInput = document.createElement('input');
+  dobInput.setAttribute('type', 'date');
+  dobInput.setAttribute('id', 'dob');
+  dobInput.setAttribute('max', getTodayString());
+  dobInput.setAttribute('oninput', 'calculateResult()');
+  if (saved && saved.dob) dobInput.value = saved.dob;
+  var dobRow = createFieldRow('dob', t('label_dob'), dobInput, csvBtn);
+  if (saved && saved.isLegacy) {
+    var legacyNote = document.createElement('div');
+    legacyNote.className = 'field-notice legacy-note';
+    var legacyText = document.createElement('p');
+    legacyText.className = noticeClass('warning', ['field']);
+    legacyText.textContent = t('legacy_note');
+    legacyNote.appendChild(legacyText);
+    dobRow.appendChild(legacyNote);
+  }
+  grid.appendChild(dobRow);
+
+  var testdateInput = document.createElement('input');
+  testdateInput.setAttribute('type', 'date');
+  testdateInput.setAttribute('id', 'testdate');
+  // Derived from latestAllowedTestDate so the browser's own validation and the
+  // check in calculateResult agree, grace day included. Set to plain "today"
+  // the browser silently rejected the grace day before our logic ever ran.
+  testdateInput.setAttribute('max', toDateString(latestAllowedTestDate()));
+  testdateInput.setAttribute('oninput', 'calculateResult()');
+  testdateInput.value = (saved && saved.testdate) ? saved.testdate : getTodayString();
+  var testdateRow = createFieldRow('testdate', t('label_test_date'), testdateInput);
+  testdateRow.classList.add('field-group-end');
+  grid.appendChild(testdateRow);
+
+  // Where "loaded 9 values from CSV" lands: full width, at the foot of the date
+  // group, so it reports on the button above it without displacing a row.
+  var csvStatus = document.createElement('div');
+  csvStatus.className = 'field-status';
+  csvStatus.id = 'csvStatus';
+  grid.appendChild(csvStatus);
+
   var csvFileInput = document.createElement('input');
   csvFileInput.setAttribute('type', 'file');
   csvFileInput.setAttribute('id', 'csvFileInput');
   csvFileInput.setAttribute('accept', '.csv');
   csvFileInput.style.display = 'none';
   csvFileInput.setAttribute('onchange', 'handleCSVUpload(this)');
-  csvRow.appendChild(csvFileInput);
-  dateSection.appendChild(csvRow);
-
-  formDiv.appendChild(dateSection);
-
-  // DOB prompt — shown when date of birth is not yet entered
-  var dobPrompt = document.createElement('div');
-  dobPrompt.className = 'dob-prompt';
-  dobPrompt.id = 'dobPrompt';
-  dobPrompt.textContent = t('dob_prompt');
-  if (saved && saved.dob) dobPrompt.style.display = 'none';
-  formDiv.appendChild(dobPrompt);
-
-  // Biomarker inputs table
-  var formTable = document.createElement('table');
+  formDiv.appendChild(csvFileInput);
 
   for (var i = 0; i < formTests.length; i++) {
-    var formRow = document.createElement('tr');
-
-    var labelCell = document.createElement('th');
-    var label = document.createElement('label');
-    label.setAttribute('for', formTests[i].id);
-    label.textContent = capitalizeFirst(formTests[i].name);
-    labelCell.appendChild(label);
-    formRow.appendChild(labelCell);
-
-    var inputCell = document.createElement('td');
     var input = document.createElement('input');
-    input.setAttribute('type', 'number');
-    input.setAttribute('step', 'any');
+    // Deliberately type="text", not "number": a number input silently clears
+    // itself to "" on invalid entry (pasted text, stray letters), so
+    // error_invalid_number could never actually fire. Text plus inputmode
+    // still gets the numeric keypad on mobile, and parseInput/Number() do the
+    // real validation either way.
+    input.setAttribute('type', 'text');
     input.setAttribute('id', formTests[i].id);
     input.setAttribute('inputmode', 'decimal');
     input.setAttribute('placeholder', t('placeholder'));
@@ -1178,16 +1355,11 @@ function createFormElements() {
     if (savedTest) {
       input.setAttribute('value', savedTest.value);
     }
-    inputCell.appendChild(input);
-    formRow.appendChild(inputCell);
 
-    var unitCell = document.createElement('td');
     var select = document.createElement('select');
     select.setAttribute('id', formTests[i].id + 'Unit');
+    select.setAttribute('aria-label', t('label_units_for', formTests[i].name));
     select.setAttribute('oninput', 'calculateResult()');
-    unitCell.appendChild(select);
-    formRow.appendChild(unitCell);
-
     for (var j = 0; j < formTests[i].units.length; j++) {
       var option = document.createElement('option');
       option.textContent = formTests[i].units[j];
@@ -1200,11 +1372,12 @@ function createFormElements() {
       select.disabled = true;
     }
 
-    formTable.appendChild(formRow);
+    grid.appendChild(createFieldRow(formTests[i].id,
+      capitalizeFirst(formTests[i].name), input, select));
   }
 
   var form = document.createElement('form');
-  form.appendChild(formTable);
+  form.appendChild(grid);
   formDiv.appendChild(form);
 
   // Restore default-value styling for fields loaded from localStorage
@@ -1237,51 +1410,180 @@ function createFormElements() {
   defaultsDiv.appendChild(defaultsNote);
   formDiv.appendChild(defaultsDiv);
 
-  // Storage notice
-  if (fromStorage) {
-    var storageDiv = document.createElement('div');
-    storageDiv.className = 'storage-notice';
-    storageDiv.id = 'storageNotice';
-    storageDiv.innerHTML = t('storage_restored') + ' ' +
-      '<a href="#" onclick="clearLocalStorage(); return false;">' + t('storage_clear_link') + '</a>';
-    formDiv.appendChild(storageDiv);
-  }
+  buildSaveSection();
 
-  if (saved && saved.dob && saved.tests.length > 0) {
-    calculateResult();
-  }
-
+  // Always run: this is what puts the "enter your date of birth" prompt on its
+  // row, and it has to reflect whatever was restored from the URL or storage.
+  calculateResult();
   updateDefaultsButton();
+}
+
+// --- Save panel --------------------------------------------------------------
+
+// Three ways to keep a result, as a tab set. They are alternatives, not a list
+// to work through, and each carries a different privacy caveat — shown one at a
+// time so it is read, rather than three competing footnotes none of which is.
+// The one thing true of all three goes in the shared intro above the tabs.
+var SAVE_TABS = [
+  { id: 'link', label: 'save_tab_link', note: 'save_privacy_note' },
+  { id: 'csv', label: 'save_tab_csv', note: 'save_csv_note' },
+  { id: 'browser', label: 'save_tab_browser', note: 'save_browser_warning' }
+];
+
+function buildSaveSection() {
+  var saveSection = document.getElementById('saveSection');
+  if (!saveSection) return;
+
+  var panel = document.createElement('div');
+  panel.className = 'save-section';
+
+  var heading = document.createElement('h3');
+  heading.textContent = t('save_section_heading');
+  panel.appendChild(heading);
+
+  var intro = document.createElement('p');
+  intro.className = 'save-intro';
+  intro.textContent = t('save_intro');
+  panel.appendChild(intro);
+
+  var tablist = document.createElement('div');
+  tablist.className = 'save-tabs';
+  tablist.setAttribute('role', 'tablist');
+  tablist.setAttribute('aria-label', t('save_tablist_label'));
+  panel.appendChild(tablist);
+
+  var panels = document.createElement('div');
+  panels.className = 'save-panels';
+  panel.appendChild(panels);
+
+  for (var i = 0; i < SAVE_TABS.length; i++) {
+    var spec = SAVE_TABS[i];
+    var selected = i === 0;   // the link leads: it is the canonical artefact
+
+    var tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'save-tab';
+    tab.id = 'savetab-' + spec.id;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-controls', 'savepanel-' + spec.id);
+    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+    // Roving tabindex: one stop for the whole set, then arrow keys within it.
+    tab.tabIndex = selected ? 0 : -1;
+    tab.textContent = t(spec.label);
+    tablist.appendChild(tab);
+
+    var tabPanel = document.createElement('div');
+    tabPanel.className = 'save-panel';
+    tabPanel.id = 'savepanel-' + spec.id;
+    tabPanel.setAttribute('role', 'tabpanel');
+    tabPanel.setAttribute('aria-labelledby', tab.id);
+    if (!selected) tabPanel.hidden = true;
+    tabPanel.appendChild(buildSaveControl(spec.id));
+
+    var note = document.createElement('p');
+    note.className = 'save-note';
+    note.textContent = t(spec.note);
+    tabPanel.appendChild(note);
+    panels.appendChild(tabPanel);
+  }
+
+  tablist.addEventListener('click', function(e) {
+    var tab = e.target.closest('.save-tab');
+    if (tab) selectSaveTab(tab.id.replace('savetab-', ''), true);
+  });
+  tablist.addEventListener('keydown', onSaveTabKeydown);
+
+  saveSection.appendChild(panel);
+}
+
+function buildSaveControl(id) {
+  var wrap = document.createElement('div');
+
+  if (id === 'link') {
+    var label = document.createElement('label');
+    label.className = 'save-control-label';
+    label.setAttribute('for', 'resultLink');
+    label.textContent = t('save_link_label');
+    wrap.appendChild(label);
+
+    var row = document.createElement('div');
+    row.className = 'save-link-row';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'resultLink';
+    input.className = 'result-link-input';
+    input.readOnly = true;
+    input.setAttribute('onclick', 'this.select()');
+    row.appendChild(input);
+    var copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'save-btn copy-btn';
+    copy.textContent = t('save_copy_button');
+    copy.onclick = copyResultLink;
+    row.appendChild(copy);
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'save-btn';
+  if (id === 'csv') {
+    btn.textContent = t('save_download_csv');
+    btn.onclick = downloadCSV;
+  } else {
+    btn.className += ' save-browser-btn';
+    btn.textContent = t('save_to_browser');
+    btn.onclick = function() { saveToLocalStorage(); showBrowserSaveConfirm(); };
+  }
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function selectSaveTab(id, focus) {
+  var tabs = document.querySelectorAll('.save-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    var isTarget = tabs[i].id === 'savetab-' + id;
+    tabs[i].setAttribute('aria-selected', isTarget ? 'true' : 'false');
+    tabs[i].tabIndex = isTarget ? 0 : -1;
+    var p = document.getElementById(tabs[i].getAttribute('aria-controls'));
+    if (p) p.hidden = !isTarget;
+    if (isTarget && focus) tabs[i].focus();
+  }
+}
+
+function onSaveTabKeydown(e) {
+  var keys = { ArrowLeft: -1, ArrowRight: 1, Home: 'first', End: 'last' };
+  if (!(e.key in keys)) return;
+  e.preventDefault();
+  var tabs = [].slice.call(document.querySelectorAll('.save-tab'));
+  var current = tabs.indexOf(document.activeElement);
+  if (current === -1) current = 0;
+  var next;
+  if (keys[e.key] === 'first') next = 0;
+  else if (keys[e.key] === 'last') next = tabs.length - 1;
+  else next = (current + keys[e.key] + tabs.length) % tabs.length;
+  selectSaveTab(tabs[next].id.replace('savetab-', ''), true);
 }
 
 // --- Fill missing values with age-appropriate population defaults ---
 
-function updateDobPrompt() {
-  var prompt = document.getElementById('dobPrompt');
-  if (!prompt) return;
-  var dobVal = document.getElementById('dob').value;
-  var testdateVal = document.getElementById('testdate').value;
-  if (dobVal && testdateVal) {
-    prompt.style.display = 'none';
-    return;
-  }
-  prompt.style.display = '';
-  prompt.className = 'dob-prompt';
-  var missingDob = !dobVal;
-  var missingTest = !testdateVal;
-  var key = (missingDob && missingTest) ? 'dob_prompt_both'
-    : missingDob ? 'dob_prompt'
-    : 'dob_prompt_testdate';
-  prompt.textContent = t(key);
+// Both messages this can show ("enter your dates first") are complaints about
+// the dates, so they are the caller's to raise and calculateResult's to retract
+// — see clearDefaultsMessage, called as soon as the dates are valid. Without
+// that the warning sat there contradicting a form the user had since fixed.
+function clearDefaultsMessage() {
+  var existing = document.querySelector('.defaults-message');
+  if (existing) existing.remove();
 }
 
 function showDefaultsMessage(text, type) {
   var section = document.getElementById('defaultsSection');
   if (!section) return;
-  var existing = section.querySelector('.defaults-message');
-  if (existing) existing.remove();
+  clearDefaultsMessage();
   var msg = document.createElement('p');
-  msg.className = 'defaults-message' + (type === 'success' ? ' success' : '');
+  msg.className = noticeClass(type === 'success' ? 'success' : 'warning', ['field']) +
+    ' defaults-message';
   msg.textContent = text;
   section.appendChild(msg);
 }
@@ -1348,7 +1650,8 @@ function fillMissingWithDefaults() {
   }
 
   if (filled > 0) {
-    showDefaultsMessage(t('defaults_filled', filled, filled > 1 ? t('defaults_filled_plural') : t('defaults_filled_singular')), 'success');
+    // No success toast here — the result list above the card now states how
+    // many values were filled from population averages.
     calculateResult();
   }
 
@@ -1433,14 +1736,13 @@ function pad(n) {
 }
 
 function showCSVMessage(text, isError) {
-  var row = document.querySelector('.csv-load-row');
-  if (!row) return;
-  var existing = row.querySelector('.csv-message');
-  if (existing) existing.remove();
-  var msg = document.createElement('span');
-  msg.className = 'csv-message' + (isError ? ' csv-message-error' : '');
+  var slot = document.getElementById('csvStatus');
+  if (!slot) return;
+  slot.innerHTML = '';
+  var msg = document.createElement('p');
+  msg.className = noticeClass(isError ? 'error' : 'success', ['field']);
   msg.textContent = text;
-  row.appendChild(msg);
+  slot.appendChild(msg);
 }
 
 function handleCSVUpload(fileInput) {
@@ -1502,7 +1804,6 @@ function handleCSVUpload(fileInput) {
     if (loaded > 0) {
       showCSVMessage(t('save_upload_success', loaded,
         loaded > 1 ? t('save_upload_success_plural') : t('save_upload_success_singular')), false);
-      updateDobPrompt();
       updateDefaultsButton();
       calculateResult();
     } else {
@@ -1567,6 +1868,7 @@ window.onload = function() {
     return loadConfig();
   }).then(function() {
     createFormElements();
+    initShareButtons(t('share_download_image'), t('share_button'));
   }).catch(function() {
     document.getElementById('phenoAgeForm').innerHTML =
       '<p>' + t('error_config_failed') + '</p>';

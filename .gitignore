@@ -5,3 +5,12 @@
 
 # Ignore all HTML files within the 'analysis' folder
 analysis/*.html
+
+# Python generator: local virtualenv and downloaded NHANES data cache
+analysis/.venv/
+analysis/.cache/
+analysis/__pycache__/
+
+# Node build tooling and its output
+node_modules/
+dist/

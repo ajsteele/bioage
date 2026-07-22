@@ -1,36 +1,149 @@
-# Simple tools for calculating biological age at home
+# Biological age calculators
 
-I’m planning on making a few tools to calculate biological age at home using simple tests, but I’ve started with a complicated one, the PhenoAge clock, because I’m going to mention that in an upcoming video and I thought it would be nice if people could work out their own values. If you just want to try it out, head to [andrewsteele.co.uk/biological-age](https://andrewsteele.co.uk/biological-age/), or see [an example](https://andrewsteele.co.uk/biological-age/#dob=1990-01-01;testdate=2024-01-01;albumin=4.5,g%2FdL;creatinine=99,%C2%B5mol%2FL;glucose=4.6,mmol%2FL;crp=0.22,mg%2FL;wbc=4.05,1000%20cells%2F%C2%B5L;lymphocyte=40,%25;mcv=85,fL;rcdw=12.9,%25;ap=36,U%2FL) with some values close to mine when I tried this (please note I’ve added noise to the test results to reduce the chances of my medical records being identified from them).
+Free, embeddable biological-age calculators from
+[The Longevity Initiative](https://thelongevityinitiative.org). Each one runs
+**entirely in the visitor's browser** — no data is ever sent to a server. Results
+live only in the page (and, where offered, in a URL you can bookmark), so the
+calculators are safe to use and safe to embed anywhere.
 
-This repo will contain the basic HTML, JavaScript and CSS behind the calculators. If you find a problem, please report it as an issue, or I’d welcome pull requests building on this. Apologies in advance for my janky scientist-JavaScript—pull requests which make the code more beautiful are also welcome!
+Live calculators:
 
-This code is free to use as you like but a link to [andrewsteele.co.uk/biological-age](https://andrewsteele.co.uk/biological-age/) would be very welcome, firstly to acknowledge the source, and secondly because I’m planning to build that page into a resource with more information about biological age calculations.
+- **PhenoAge** — biological age estimated from routine blood biomarkers.
+- **Dog years** — human-equivalent dog age from an epigenetic (DNA-methylation)
+  formula.
 
-For privacy reasons, these calculators will never store your data. You can only access previous results by bookmarking the URL provided, and the results are stored in the URL anchor (the bit after the `#` symbol) which is never transmitted to the server—all the calculations are done locally in your web browser.
+The code is deliberately plain HTML / CSS / vanilla JS so it's easy to read and
+contribute to. Found a bug or want to add a calculator? Issues and pull requests
+are very welcome.
 
-## Files
+## Layout
 
-- `bioage.css` is a generic CSS file with a few small tweaks to visual appearance that will be used for all the calculators.
-- `phenoage.html` and `phenoage.js` are the files used to calculate and display PhenoAge estimates from blood tests. Other measures of biological age will get their own HTML and JS files for tidyness.
+```
+embed/                         # everything that ships to the website's /embed/
+  index.html                   # the "embed a calculator" picker page
+  calculators.json             # manifest: which calculators exist + are ready
+  calculators/<id>/            # one self-contained calculator per folder
+    index.html                 #   the iframe embed target
+    <id>.js, share-card.js     #   calculator + share-card logic
+    config/, strings/          #   data + copy, fetched at runtime
+  shared/                      # assets shared across calculators
+    embed.css, card-kit.js     #   styles + share-card canvas primitives
+    setup.js                   #   host-page iframe auto-resizer (see below)
+    fonts/, assets/            #   self-hosted fonts, logo, favicon
+analysis/                      # dev-only: R/Python that generates the config data
+build.mjs                      # produces the minified dist/ that gets deployed
+```
 
-## TODO
+## The manifest
 
-- There are a couple of `TODO`s in the JavaScript that would be nice to fix.
-- Improve code commenting
-- Convert the test unit conversions into a CSV for ease of adding new ones, and to allow a column containing the source to be included.
-   - In particular, check the conversion for CRP (see [this issue](https://github.com/ajsteele/bioage/issues/1)).
-- Add more units for the various tests.
-- I should have coded the tests, results, units, etc as objects rather than arrays, to make keeping track of what’s going on easier.
-- Add default values for people of a specific age, perhaps with a checkbox or other input so you can fill in if you’re missing a couple of tests. (Which I was when I did this!) Get these from the median values for each age of each test from the [NHANES data](https://wwwn.cdc.gov/nchs/nhanes/nhanes3/datafiles.aspx) this clock was trained on, make a CSV, allow the JavaScript to read that in.
-- Add more methods of converting stuff to biological age, like time standing on one leg etc.
-- It would be nice to include uncertainty ranges.
+`embed/calculators.json` is the single source of truth for which calculators
+exist and which are ready to go live:
 
-### Biomarkers to add
+```json
+{ "id": "phenoage", "ready": true, "name": "…", "label": "…", "path": "calculators/phenoage/" }
+```
 
-- Time spent standing on one leg
-- Heart rate variability ([Fitbit data](https://www.thelancet.com/journals/landig/article/PIIS2589-7500(20)30246-6/fulltext))
-- An amazing array of potential biomarkers are listed on the [Geriatric Examination Tool Kit](https://geriatrictoolkit.missouri.edu/).
+- `ready: false` holds a calculator back — its files stay in the repo, but the
+  build omits its folder from `dist/` and leaves it out of the shipped manifest,
+  so it can't appear or be linked to on the live site.
+- The picker builds its menu from this manifest at runtime.
+- An optional `anchor` (defaults to `id`) is the deep-link key — see below.
 
-# Other tools for biomarker calculation
+## Deep links
 
-For more detailed analysis of biomarkers using Python, try [Biolearn](https://bio-learn.github.io/)!
+`/embed/#<anchor>` pre-selects a calculator in the picker, e.g.
+`https://thelongevityinitiative.org/embed/#phenoage`. The hash is matched
+**exactly** against each calculator's `anchor` (its `id` by default). If two
+calculators of different types ever need the same short name, give one an
+explicit `anchor` (e.g. `"anchor": "graphs/phenoage"`) — no other links change.
+
+## Develop
+
+Calculators fetch their config/strings, so they need to be served over HTTP
+(not opened as `file://`):
+
+```sh
+npm run dev     # serves embed/ at http://localhost:8000
+```
+
+The dev server shows the full manifest filtered by the `ready` flag, so it
+behaves like production. (`npm run dev` uses Python's `http.server`; any static
+server pointed at `embed/` works.)
+
+## Build & deploy
+
+```sh
+npm install
+npm run build   # writes dist/
+npm run preview # build, then serve dist/ at http://localhost:8000
+```
+
+`build.mjs` (esbuild) emits `dist/` — the folder to deploy as the site's
+`/embed/`. It ships only ready calculators, bundles each page's scripts into one
+`app.min.js`, and minifies HTML-inline JS/CSS, external CSS/JS, and shared
+assets. `dist/` mirrors `embed/` exactly, so all relative paths and the
+`shared/setup.js` URL keep resolving.
+
+Standalone pages at `/calculators/<id>/` are built separately on the main
+Longevity Initiative site, which embeds `/embed/calculators/<id>/` as an iframe
+and adds explanatory copy. The embed pages carry `<meta name="robots"
+noindex>` and a canonical link so search credits those standalone pages.
+
+### Deploying the picker into WordPress
+
+The `/embed/` **picker** page can live as a WordPress page instead of a static
+file. Upload everything in `dist/` **except `index.html`** to the server's
+`/embed/` path (so `/embed/calculators/…`, `/embed/shared/…`, `/embed/picker.js`
+and `/embed/calculators.json` are static files), and let WordPress own the
+`/embed/` page — the web server's `try_files` would otherwise serve a static
+`index.html` in preference to the WordPress page.
+
+`npm run build` also emits **`dist/embed.wordpress-blocks.html`**: the picker as
+Gutenberg block markup. To use it:
+
+1. Create a page, set its permalink to `/embed/` and title to "Embed a calculator".
+2. In the editor, open **Options ⋮ → Code editor** (Ctrl+Shift+Alt+M), paste the
+   whole file, then switch back to the **Visual editor**.
+
+It expands into native Heading/Paragraph blocks (which inherit your theme) plus
+Custom HTML blocks for the interactive builder — no theme `style.css` edits and
+no per-element inline styles (a small namespaced `.liec-*` stylesheet rides
+along in the trailing block). The `<script>` survives only for users who can
+post unfiltered HTML — administrators on single-site WordPress. The shared
+picker logic loads from `/embed/picker.js`, so future logic changes never need
+re-pasting.
+
+### Web-server checklist
+
+The build can't set HTTP headers, so configure these where `dist/` is served:
+
+- **Allow framing.** Do **not** send `X-Frame-Options: DENY` or a restrictive
+  `Content-Security-Policy: frame-ancestors` for `/embed/*` — these pages are
+  meant to be embedded on other people's sites.
+- **Cache `shared/setup.js` moderately, not forever.** It's pasted verbatim into
+  third-party pages, so its URL is a permanent contract and can't be
+  content-hashed. Give it a short-to-medium `max-age` (≈1 hour–1 day) so fixes
+  propagate; **never** `immutable`.
+- Long-cache fonts and other static assets; short-cache HTML.
+
+### How the auto-resize works
+
+The embed snippet loads `shared/setup.js` on the **host** page. Each calculator
+`postMessage`s its content height out of its cross-origin iframe, and `setup.js`
+sizes the iframe to match. Messages are trusted by **origin**, so the embed URL
+path can change freely — only moving to a new domain would require editing the
+one `ORIGIN` constant in `setup.js` (and `EMBED_ORIGIN` in `embed/index.html`).
+
+## The analysis folder
+
+`analysis/` holds the R and Python that generate PhenoAge's config data
+(default marker values by age, uncertainty ranges, plausibility bounds) from the
+NHANES-III dataset the clock was trained on. It's dev-only and not deployed; see
+`analysis/requirements.txt` for the Python setup.
+
+## Licence
+
+[CC0 1.0 Universal](LICENSE) — dedicated to the public domain, so you're free to
+use, adapt and embed these calculators however you like. A link back to
+[The Longevity Initiative](https://thelongevityinitiative.org) is appreciated
+but not required.
